@@ -24,17 +24,49 @@ import {
 const appConfig = new AppConfig(['store_write', 'publish_data']);
 const userSession = new UserSession({ appConfig });
 
-// Network configuration
-const network = process.env.NODE_ENV === 'production' 
-  ? STACKS_MAINNET 
-  : STACKS_TESTNET;
-
-// Contract addresses 
-const CONTRACTS = {
-  ESCROW: process.env.NEXT_PUBLIC_ESCROW_CONTRACT || 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.workshield-escrow',
-  PAYMENTS: process.env.NEXT_PUBLIC_PAYMENTS_CONTRACT || 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.workshield-payments',
-  DISPUTE: process.env.NEXT_PUBLIC_DISPUTE_CONTRACT || 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.workshield-dispute'
+// Network configuration - Updated for proper env handling
+const getNetwork = () => {
+  const networkType = process.env.NEXT_PUBLIC_NETWORK || 'testnet';
+  return networkType === 'mainnet' ? STACKS_MAINNET : STACKS_TESTNET;
 };
+
+const network = getNetwork();
+
+// Contract addresses - Updated to use env variables
+const getContractAddress = (contractName: string) => {
+  const envKey = `NEXT_PUBLIC_${contractName.toUpperCase()}_CONTRACT`;
+  const envAddress = process.env[envKey];
+  
+  if (envAddress) {
+    return envAddress;
+  }
+  
+  // Fallback addresses
+  const fallbackMap = {
+    'ESCROW': 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.workshield-escrow',
+    'PAYMENTS': 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.workshield-payments', 
+    'DISPUTE': 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.workshield-dispute'
+  };
+  
+  return fallbackMap[contractName as keyof typeof fallbackMap] || '';
+};
+
+const CONTRACTS = {
+  ESCROW: getContractAddress('ESCROW'),
+  PAYMENTS: getContractAddress('PAYMENTS'),
+  DISPUTE: getContractAddress('DISPUTE')
+};
+
+// Validate contract addresses on load
+const validateContracts = () => {
+  Object.entries(CONTRACTS).forEach(([name, address]) => {
+    if (!address) {
+      console.error(`Missing contract address for ${name}. Check your .env.local file.`);
+    }
+  });
+};
+
+validateContracts();
 
 interface ContractCallOptions {
   contractAddress: string;
@@ -74,7 +106,7 @@ export const useStacks = () => {
     showConnect({
       appDetails: {
         name: 'WorkShield',
-        icon: window.location.origin + '/icon.png',
+        icon: window.location.origin + '/favicon.ico',
       },
       redirectTo: '/',
       onFinish: () => {
@@ -84,12 +116,11 @@ export const useStacks = () => {
     });
   }, []);
 
-  // Disconnect wallet 
+  // Disconnect wallet
   const disconnectWallet = useCallback(() => {
     userSession.signUserOut();
     setUserData(null);
     setIsSignedIn(false);
-    // Optionally redirect or reload
     window.location.href = '/';
   }, []);
 
@@ -113,9 +144,11 @@ export const useStacks = () => {
       postConditionMode: PostConditionMode.Deny,
       onFinish: onFinish || ((data) => {
         console.log('Transaction submitted:', data);
+        // You can add toast notification here
       }),
       onCancel: onCancel || (() => {
         console.log('Transaction cancelled');
+        // You can add toast notification here
       }),
     });
   }, []);
@@ -129,15 +162,23 @@ export const useStacks = () => {
     totalAmount: number,
     onFinish?: (data: any) => void
   ) => {
-    if (!userData) return;
+    if (!userData) {
+      alert('Please connect your wallet first');
+      return;
+    }
 
+    // Get the correct address based on network
+    const userAddress = userData.profile.stxAddress.testnet || userData.profile.stxAddress.mainnet;
+    
     const postConditions = [
-      Pc.principal(userData.profile.stxAddress.testnet).willSendEq(totalAmount).ustx()
+      Pc.principal(userAddress).willSendEq(totalAmount).ustx()
     ];
 
+    const [contractAddress, contractName] = CONTRACTS.ESCROW.split('.');
+
     callContract({
-      contractAddress: CONTRACTS.ESCROW.split('.')[0],
-      contractName: CONTRACTS.ESCROW.split('.')[1],
+      contractAddress,
+      contractName,
       functionName: 'create-escrow',
       functionArgs: [
         standardPrincipalCV(client),
@@ -159,9 +200,13 @@ export const useStacks = () => {
     deadline: number,
     onFinish?: (data: any) => void
   ) => {
+    if (!userData) return;
+
+    const [contractAddress, contractName] = CONTRACTS.ESCROW.split('.');
+
     callContract({
-      contractAddress: CONTRACTS.ESCROW.split('.')[0],
-      contractName: CONTRACTS.ESCROW.split('.')[1],
+      contractAddress,
+      contractName,
       functionName: 'add-milestone',
       functionArgs: [
         uintCV(contractId),
@@ -171,7 +216,7 @@ export const useStacks = () => {
       ],
       onFinish
     });
-  }, [callContract]);
+  }, [userData, callContract]);
 
   // Submit milestone
   const submitMilestone = useCallback((
@@ -180,9 +225,13 @@ export const useStacks = () => {
     submissionNotes: string,
     onFinish?: (data: any) => void
   ) => {
+    if (!userData) return;
+
+    const [contractAddress, contractName] = CONTRACTS.ESCROW.split('.');
+
     callContract({
-      contractAddress: CONTRACTS.ESCROW.split('.')[0],
-      contractName: CONTRACTS.ESCROW.split('.')[1],
+      contractAddress,
+      contractName,
       functionName: 'submit-milestone',
       functionArgs: [
         uintCV(contractId),
@@ -191,7 +240,7 @@ export const useStacks = () => {
       ],
       onFinish
     });
-  }, [callContract]);
+  }, [userData, callContract]);
 
   // Approve milestone
   const approveMilestone = useCallback((
@@ -199,9 +248,13 @@ export const useStacks = () => {
     milestoneId: number,
     onFinish?: (data: any) => void
   ) => {
+    if (!userData) return;
+
+    const [contractAddress, contractName] = CONTRACTS.ESCROW.split('.');
+
     callContract({
-      contractAddress: CONTRACTS.ESCROW.split('.')[0],
-      contractName: CONTRACTS.ESCROW.split('.')[1],
+      contractAddress,
+      contractName,
       functionName: 'approve-milestone',
       functionArgs: [
         uintCV(contractId),
@@ -209,7 +262,7 @@ export const useStacks = () => {
       ],
       onFinish
     });
-  }, [callContract]);
+  }, [userData, callContract]);
 
   // Reject milestone
   const rejectMilestone = useCallback((
@@ -218,9 +271,13 @@ export const useStacks = () => {
     reason: string,
     onFinish?: (data: any) => void
   ) => {
+    if (!userData) return;
+
+    const [contractAddress, contractName] = CONTRACTS.ESCROW.split('.');
+
     callContract({
-      contractAddress: CONTRACTS.ESCROW.split('.')[0],
-      contractName: CONTRACTS.ESCROW.split('.')[1],
+      contractAddress,
+      contractName,
       functionName: 'reject-milestone',
       functionArgs: [
         uintCV(contractId),
@@ -229,7 +286,7 @@ export const useStacks = () => {
       ],
       onFinish
     });
-  }, [callContract]);
+  }, [userData, callContract]);
 
   // Create dispute
   const createDispute = useCallback((
@@ -237,17 +294,32 @@ export const useStacks = () => {
     reason: string,
     onFinish?: (data: any) => void
   ) => {
+    if (!userData) return;
+
+    const [contractAddress, contractName] = CONTRACTS.DISPUTE.split('.');
+
     callContract({
-      contractAddress: CONTRACTS.DISPUTE.split('.')[0],
-      contractName: CONTRACTS.DISPUTE.split('.')[1],
-      functionName: 'create-dispute',
+      contractAddress,
+      contractName,
+      functionName: 'open-dispute',
       functionArgs: [
         uintCV(contractId),
+        standardPrincipalCV(userData.profile.stxAddress.testnet || userData.profile.stxAddress.mainnet),
+        standardPrincipalCV(userData.profile.stxAddress.testnet || userData.profile.stxAddress.mainnet), // This would be dynamic based on contract
         stringUtf8CV(reason)
       ],
       onFinish
     });
-  }, [callContract]);
+  }, [userData, callContract]);
+
+  // Get network info
+  const getNetworkInfo = useCallback(() => {
+    return {
+      network: process.env.NEXT_PUBLIC_NETWORK || 'testnet',
+      apiUrl: process.env.NEXT_PUBLIC_STACKS_API_URL || 'https://api.testnet.hiro.so',
+      explorerUrl: process.env.NEXT_PUBLIC_STACKS_EXPLORER_URL || 'https://explorer.hiro.so/?chain=testnet'
+    };
+  }, []);
 
   return {
     userData,
@@ -264,6 +336,7 @@ export const useStacks = () => {
     rejectMilestone,
     createDispute,
     network,
+    networkInfo: getNetworkInfo(),
     contracts: CONTRACTS
   };
 };
