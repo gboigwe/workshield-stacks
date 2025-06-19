@@ -10,21 +10,21 @@ plan:
       transactions:
         - contract-publish:
             contract-name: workshield-dispute
-            expected-sender: STD4RPGJAA0Y2R49QP9S3JKWGEME13QDRTBR34ZQ
+            expected-sender: STYEW1XAGYXMHV3GG8FPAE1J2CVCXH7TWA264G0Q
             cost: 6409
             path: contracts/workshield-dispute.clar
             anchor-block-only: true
             clarity-version: 3
         - contract-publish:
             contract-name: workshield-escrow
-            expected-sender: STD4RPGJAA0Y2R49QP9S3JKWGEME13QDRTBR34ZQ
+            expected-sender: STYEW1XAGYXMHV3GG8FPAE1J2CVCXH7TWA264G0Q
             cost: 9778
             path: contracts/workshield-escrow.clar
             anchor-block-only: true
             clarity-version: 3
         - contract-publish:
             contract-name: workshield-payments
-            expected-sender: STD4RPGJAA0Y2R49QP9S3JKWGEME13QDRTBR34ZQ
+            expected-sender: STYEW1XAGYXMHV3GG8FPAE1J2CVCXH7TWA264G0Q
             cost: 6823
             path: contracts/workshield-payments.clar
             anchor-block-only: true
