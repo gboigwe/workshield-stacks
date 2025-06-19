@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useStacks } from '@/hooks/useStacks';
-import StatsCards from '@/components/dashboard/stats-cards';
+import StatsCards from '@/components/dashboard/stats-card';
 import ContractList from '@/components/contract/contract-list';
 import { Contract, DashboardStats, ContractStatus, UserRole } from '@/types';
 
@@ -21,7 +21,7 @@ export default function DashboardPage() {
 
   const userAddress = userData?.profile?.stxAddress?.testnet || userData?.profile?.stxAddress?.mainnet;
 
-  // Mock data for development - replace with actual contract fetching
+  // Mock data for development - will replace with actual contract fetching
   useEffect(() => {
     const fetchDashboardData = async () => {
       if (!userAddress) return;
