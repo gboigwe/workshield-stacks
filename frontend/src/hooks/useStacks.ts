@@ -10,8 +10,7 @@ import {
 } from '@stacks/connect';
 import { 
   STACKS_TESTNET, 
-  STACKS_MAINNET,
-  STACKS_DEVNET 
+  STACKS_MAINNET 
 } from '@stacks/network';
 import {
   PostConditionMode,
@@ -25,47 +24,17 @@ import {
 const appConfig = new AppConfig(['store_write', 'publish_data']);
 const userSession = new UserSession({ appConfig });
 
-// Network configuration - UPDATED for devnet support
-const getNetwork = () => {
-  if (process.env.NODE_ENV === 'development') {
-    // For local development, use devnet
-    return STACKS_DEVNET;
-  } else if (process.env.NEXT_PUBLIC_NETWORK === 'testnet') {
-    return STACKS_TESTNET;
-  } else {
-    return STACKS_MAINNET;
-  }
+// Network configuration
+const network = process.env.NODE_ENV === 'production' 
+  ? STACKS_MAINNET 
+  : STACKS_TESTNET;
+
+// Contract addresses 
+const CONTRACTS = {
+  ESCROW: process.env.NEXT_PUBLIC_ESCROW_CONTRACT || 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.workshield-escrow',
+  PAYMENTS: process.env.NEXT_PUBLIC_PAYMENTS_CONTRACT || 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.workshield-payments',
+  DISPUTE: process.env.NEXT_PUBLIC_DISPUTE_CONTRACT || 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.workshield-dispute'
 };
-
-const network = getNetwork();
-
-// Contract addresses - UPDATED for different environments
-const getContractAddresses = () => {
-  if (process.env.NODE_ENV === 'development') {
-    // Devnet uses predictable addresses
-    return {
-      ESCROW: 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.workshield-escrow',
-      PAYMENTS: 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.workshield-payments',
-      DISPUTE: 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.workshield-dispute'
-    };
-  } else if (process.env.NEXT_PUBLIC_NETWORK === 'testnet') {
-    // These will be set after testnet deployment
-    return {
-      ESCROW: process.env.NEXT_PUBLIC_ESCROW_CONTRACT_TESTNET || 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.workshield-escrow',
-      PAYMENTS: process.env.NEXT_PUBLIC_PAYMENTS_CONTRACT_TESTNET || 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.workshield-payments',
-      DISPUTE: process.env.NEXT_PUBLIC_DISPUTE_CONTRACT_TESTNET || 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.workshield-dispute'
-    };
-  } else {
-    // Mainnet addresses (when ready)
-    return {
-      ESCROW: process.env.NEXT_PUBLIC_ESCROW_CONTRACT_MAINNET || 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.workshield-escrow',
-      PAYMENTS: process.env.NEXT_PUBLIC_PAYMENTS_CONTRACT_MAINNET || 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.workshield-payments',
-      DISPUTE: process.env.NEXT_PUBLIC_DISPUTE_CONTRACT_MAINNET || 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.workshield-dispute'
-    };
-  }
-};
-
-const CONTRACTS = getContractAddresses();
 
 interface ContractCallOptions {
   contractAddress: string;
@@ -115,11 +84,12 @@ export const useStacks = () => {
     });
   }, []);
 
-  // Disconnect wallet - UPDATED for v8.x
+  // Disconnect wallet 
   const disconnectWallet = useCallback(() => {
     userSession.signUserOut();
     setUserData(null);
     setIsSignedIn(false);
+    // Optionally redirect or reload
     window.location.href = '/';
   }, []);
 
@@ -150,7 +120,7 @@ export const useStacks = () => {
     });
   }, []);
 
-  // Create escrow contract - UPDATED with new Pc syntax
+  // Create escrow contract
   const createEscrow = useCallback((
     client: string,
     freelancer: string,
@@ -161,10 +131,8 @@ export const useStacks = () => {
   ) => {
     if (!userData) return;
 
-    const userAddress = userData.profile.stxAddress.testnet || userData.profile.stxAddress.mainnet;
-    
     const postConditions = [
-      Pc.principal(userAddress).willSendEq(totalAmount).ustx()
+      Pc.principal(userData.profile.stxAddress.testnet).willSendEq(totalAmount).ustx()
     ];
 
     callContract({
@@ -281,14 +249,11 @@ export const useStacks = () => {
     });
   }, [callContract]);
 
-  // Calculate userAddress
-  const userAddress = userData?.profile?.stxAddress?.testnet || userData?.profile?.stxAddress?.mainnet || null;
-
   return {
     userData,
     isSignedIn,
     loading,
-    userAddress, // ADDED this line - this was missing!
+    userAddress: userData?.profile?.stxAddress?.testnet || userData?.profile?.stxAddress?.mainnet || null,
     connectWallet,
     disconnectWallet,
     callContract,
