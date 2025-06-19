@@ -1,0 +1,49 @@
+# chainhook-config.toml - Local Chainhook configuration for devnet
+
+[storage]
+working_dir = "cache"
+
+[network]
+mode = "devnet"
+bitcoind_rpc_url = "http://localhost:18443"
+bitcoind_rpc_username = "devnet"
+bitcoind_rpc_password = "devnet"
+stacks_node_rpc_url = "http://localhost:20443"
+
+[http_api]
+http_port = 20456
+database_uri = "redis://localhost:6379/"
+
+# Predicate for WorkShield escrow events
+[[predicates]]
+uuid = "workshield-escrow-events"
+name = "WorkShield Escrow Events"
+network = "devnet"
+version = 1
+start_block = 1
+
+[predicates.predicate]
+scope = "contract_call"
+contract_identifier = "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.workshield-escrow"
+method = ["create-escrow", "add-milestone", "submit-milestone", "approve-milestone", "reject-milestone"]
+
+[predicates.action]
+http_post_url = "http://localhost:3000/api/webhooks/contract-events"
+http_post_authorization_header = "Bearer local_dev_secret"
+
+# Predicate for WorkShield dispute events  
+[[predicates]]
+uuid = "workshield-dispute-events"
+name = "WorkShield Dispute Events"
+network = "devnet"
+version = 1
+start_block = 1
+
+[predicates.predicate]
+scope = "contract_call"
+contract_identifier = "ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.workshield-dispute"
+method = ["open-dispute", "submit-evidence", "resolve-dispute"]
+
+[predicates.action]
+http_post_url = "http://localhost:3000/api/webhooks/contract-events" 
+http_post_authorization_header = "Bearer local_dev_secret"
