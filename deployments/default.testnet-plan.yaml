@@ -1,0 +1,32 @@
+---
+id: 0
+name: Testnet deployment
+network: testnet
+stacks-node: "https://api.testnet.hiro.so"
+bitcoin-node: "${BITCOIN_NODE_URL}"
+plan:
+  batches:
+    - id: 0
+      transactions:
+        - contract-publish:
+            contract-name: workshield-dispute
+            expected-sender: ST3A5HQKQM3T3BV1MCZ45S6Q729V8355BQ0W0NP2V
+            cost: 63850
+            path: contracts/workshield-dispute.clar
+            anchor-block-only: true
+            clarity-version: 3
+        - contract-publish:
+            contract-name: workshield-escrow
+            expected-sender: ST3A5HQKQM3T3BV1MCZ45S6Q729V8355BQ0W0NP2V
+            cost: 97550
+            path: contracts/workshield-escrow.clar
+            anchor-block-only: true
+            clarity-version: 3
+        - contract-publish:
+            contract-name: workshield-payments
+            expected-sender: ST3A5HQKQM3T3BV1MCZ45S6Q729V8355BQ0W0NP2V
+            cost: 67980
+            path: contracts/workshield-payments.clar
+            anchor-block-only: true
+            clarity-version: 3
+      epoch: "3.1"
