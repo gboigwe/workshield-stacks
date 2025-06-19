@@ -144,11 +144,9 @@ export const useStacks = () => {
       postConditionMode: PostConditionMode.Deny,
       onFinish: onFinish || ((data) => {
         console.log('Transaction submitted:', data);
-        // You can add toast notification here
       }),
       onCancel: onCancel || (() => {
         console.log('Transaction cancelled');
-        // You can add toast notification here
       }),
     });
   }, []);
@@ -305,7 +303,7 @@ export const useStacks = () => {
       functionArgs: [
         uintCV(contractId),
         standardPrincipalCV(userData.profile.stxAddress.testnet || userData.profile.stxAddress.mainnet),
-        standardPrincipalCV(userData.profile.stxAddress.testnet || userData.profile.stxAddress.mainnet), // This would be dynamic based on contract
+        standardPrincipalCV(userData.profile.stxAddress.testnet || userData.profile.stxAddress.mainnet), 
         stringUtf8CV(reason)
       ],
       onFinish
