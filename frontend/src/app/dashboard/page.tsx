@@ -1,15 +1,22 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { motion } from 'framer-motion';
 import { useStacks } from '@/hooks/useStacks';
 import StatsCards from '@/components/dashboard/stats-card';
 import ContractList from '@/components/contract/contract-list';
 import { Contract, DashboardStats, ContractStatus, UserRole } from '@/types';
+import { formatAddress } from '@/lib/utils';
+import { Plus, User, Briefcase } from 'lucide-react';
 
 export default function DashboardPage() {
-  const { userData, isSignedIn } = useStacks();
+  const { userData, isSignedIn, loading } = useStacks();
+  const router = useRouter();
+  const [mounted, setMounted] = useState(false);
+  const [activeTab, setActiveTab] = useState<UserRole>(UserRole.CLIENT);
   const [contracts, setContracts] = useState<Contract[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [contractsLoading, setContractsLoading] = useState(true);
   const [stats, setStats] = useState<DashboardStats>({
     totalContracts: 0,
     activeContracts: 0,
@@ -21,208 +28,232 @@ export default function DashboardPage() {
 
   const userAddress = userData?.profile?.stxAddress?.testnet || userData?.profile?.stxAddress?.mainnet;
 
-  // Mock data for development - will replace with actual contract fetching
   useEffect(() => {
-    const fetchDashboardData = async () => {
-      if (!userAddress) return;
-      
-      setLoading(true);
-      
-      try {
-        // Simulate API delay
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        // Mock contracts data - in production, this would fetch from Stacks blockchain
-        const mockContracts: Contract[] = [
-          {
-            id: 1,
-            client: userAddress,
-            freelancer: 'ST2NEB84ASENDXZYNT4PTDLR2ZDSBN2TB7SNPPYQVJ',
-            totalAmount: 50000000, // 50 STX
-            remainingBalance: 30000000, // 30 STX
-            status: ContractStatus.ACTIVE,
-            createdAt: Date.now() - 7 * 24 * 60 * 60 * 1000, // 7 days ago
-            endDate: Date.now() + 23 * 24 * 60 * 60 * 1000, // 23 days from now
-            description: 'Full-stack web application development'
-          },
-          {
-            id: 2,
-            client: 'ST2NEB84ASENDXZYNT4PTDLR2ZDSBN2TB7SNPPYQVJ',
-            freelancer: userAddress,
-            totalAmount: 25000000, // 25 STX
-            remainingBalance: 0,
-            status: ContractStatus.COMPLETED,
-            createdAt: Date.now() - 30 * 24 * 60 * 60 * 1000, // 30 days ago
-            endDate: Date.now() - 2 * 24 * 60 * 60 * 1000, // 2 days ago
-            description: 'Smart contract audit and optimization'
-          },
-          {
-            id: 3,
-            client: userAddress,
-            freelancer: 'ST39MJ145BR6S8C315AG2BD61SJ16E208P1FDK3AK',
-            totalAmount: 75000000, // 75 STX
-            remainingBalance: 75000000, // 75 STX
-            status: ContractStatus.ACTIVE,
-            createdAt: Date.now() - 3 * 24 * 60 * 60 * 1000, // 3 days ago
-            endDate: Date.now() + 45 * 24 * 60 * 60 * 1000, // 45 days from now
-            description: 'Mobile app UI/UX design and development'
-          }
-        ];
+    setMounted(true);
+  }, []);
 
-        // Calculate stats based on user role in each contract
-        const userAsClient = mockContracts.filter(c => c.client === userAddress);
-        const userAsFreelancer = mockContracts.filter(c => c.freelancer === userAddress);
-        
-        const totalContracts = userAsClient.length + userAsFreelancer.length;
-        const activeContracts = mockContracts.filter(c => 
-          (c.client === userAddress || c.freelancer === userAddress) && 
-          c.status === ContractStatus.ACTIVE
-        ).length;
-        
-        const completedContracts = mockContracts.filter(c => 
-          (c.client === userAddress || c.freelancer === userAddress) && 
-          c.status === ContractStatus.COMPLETED
-        ).length;
-
-        // Total earnings for freelancer work
-        const totalEarnings = userAsFreelancer
-          .filter(c => c.status === ContractStatus.COMPLETED)
-          .reduce((sum, c) => sum + (c.totalAmount - c.remainingBalance), 0);
-
-        // Pending payments (as client - remaining balances of active contracts)
-        const pendingPayments = userAsClient
-          .filter(c => c.status === ContractStatus.ACTIVE)
-          .reduce((sum, c) => sum + c.remainingBalance, 0);
-
-        setContracts(mockContracts);
-        setStats({
-          totalContracts,
-          activeContracts,
-          completedContracts,
-          totalEarnings,
-          pendingPayments,
-          openDisputes: 0 // Would be calculated from actual dispute data
-        });
-
-      } catch (error) {
-        console.error('Error fetching dashboard data:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (isSignedIn && userAddress) {
-      fetchDashboardData();
+  useEffect(() => {
+    if (mounted && !loading && !isSignedIn) {
+      router.push('/');
     }
-  }, [isSignedIn, userAddress]);
+  }, [isSignedIn, loading, router, mounted]);
 
-  // Determine primary user role based on contracts
-  const getUserPrimaryRole = (): 'client' | 'freelancer' => {
-    const clientContracts = contracts.filter(c => c.client === userAddress).length;
-    const freelancerContracts = contracts.filter(c => c.freelancer === userAddress).length;
+  useEffect(() => {
+    if (userAddress) {
+      fetchContracts();
+    }
+  }, [userAddress, activeTab]);
+
+  const fetchContracts = async () => {
+    if (!userAddress) return;
     
-    return clientContracts >= freelancerContracts ? 'client' : 'freelancer';
+    setContractsLoading(true);
+    
+    try {
+      // Simulate API delay
+      await new Promise(resolve => setTimeout(resolve, 800));
+      
+      // Suppose to fetch from the Stacks blockchain ............. IN VIEW
+      // For now, we'll use static mock data that doesn't change randomly
+      const allContracts: Contract[] = [
+        {
+          id: 1,
+          client: 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM',
+          freelancer: 'ST2NEB84ASENDXZYNT4PTDLR2ZDSBN2TB7SNPPYQVJ',
+          totalAmount: 50000000, // 50 STX
+          remainingBalance: 30000000, // 30 STX
+          status: ContractStatus.ACTIVE,
+          createdAt: Date.now() - 7 * 24 * 60 * 60 * 1000,
+          endDate: Date.now() + 23 * 24 * 60 * 60 * 1000,
+          description: 'Full-stack web application development with React and Node.js'
+        },
+        {
+          id: 2,
+          client: 'ST3PF13W7Z0RRM42A8VZRVFQ75SV1K26RXEP8YGKJ',
+          freelancer: userAddress,
+          totalAmount: 25000000, // 25 STX
+          remainingBalance: 10000000, // 10 STX
+          status: ContractStatus.ACTIVE,
+          createdAt: Date.now() - 5 * 24 * 60 * 60 * 1000,
+          endDate: Date.now() + 15 * 24 * 60 * 60 * 1000,
+          description: 'Mobile app UI/UX design for e-commerce platform'
+        },
+        {
+          id: 3,
+          client: userAddress,
+          freelancer: 'ST1J4G6RR643BCG8G8SR6M2D9Z9KXT2NJDRK3FBTK',
+          totalAmount: 75000000, // 75 STX
+          remainingBalance: 0,
+          status: ContractStatus.COMPLETED,
+          createdAt: Date.now() - 30 * 24 * 60 * 60 * 1000,
+          endDate: Date.now() - 5 * 24 * 60 * 60 * 1000,
+          description: 'Smart contract audit and security review'
+        }
+      ];
+
+      // Filter contracts based on active tab
+      let filteredContracts;
+      if (activeTab === UserRole.CLIENT) {
+        // Show contracts where user is the client
+        filteredContracts = allContracts.filter(contract => contract.client === userAddress);
+      } else {
+        // Show contracts where user is the freelancer
+        filteredContracts = allContracts.filter(contract => contract.freelancer === userAddress);
+      }
+
+      setContracts(filteredContracts);
+
+      // Calculate stats based on filtered contracts
+      const activeContracts = filteredContracts.filter(c => c.status === ContractStatus.ACTIVE).length;
+      const completedContracts = filteredContracts.filter(c => c.status === ContractStatus.COMPLETED).length;
+      const totalEarnings = filteredContracts
+        .filter(c => c.status === ContractStatus.COMPLETED)
+        .reduce((sum, c) => sum + c.totalAmount, 0);
+      const pendingPayments = filteredContracts
+        .filter(c => c.status === ContractStatus.ACTIVE)
+        .reduce((sum, c) => sum + c.remainingBalance, 0);
+
+      setStats({
+        totalContracts: filteredContracts.length,
+        activeContracts,
+        completedContracts,
+        totalEarnings,
+        pendingPayments,
+        openDisputes: 0 // TODO: Calculate from disputes
+      });
+
+    } catch (error) {
+      console.error('Error fetching contracts:', error);
+    } finally {
+      setContractsLoading(false);
+    }
   };
 
-  const primaryRole = getUserPrimaryRole();
-  
-  // Get recent contracts (max 6 for dashboard overview)
-  const recentContracts = contracts
-    .sort((a, b) => b.createdAt - a.createdAt)
-    .slice(0, 6);
+  if (!mounted || loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-orange-600"></div>
+      </div>
+    );
+  }
 
   if (!isSignedIn) {
     return null;
   }
 
   return (
-    <div className="space-y-8">
+    <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">
-          Dashboard
-        </h1>
-        <p className="mt-1 text-sm text-gray-500">
-          Welcome back! Here's what's happening with your contracts.
-        </p>
-      </div>
-
-      {/* Stats Cards */}
-      <StatsCards stats={stats} userRole={primaryRole} />
-
-      {/* Quick Actions */}
-      <div className="bg-white shadow rounded-lg">
-        <div className="px-4 py-5 sm:p-6">
-          <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">
-            Quick Actions
-          </h3>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <a
-              href="/dashboard/create"
-              className="flex items-center justify-center px-4 py-3 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 transition-colors"
+      <div className="bg-white shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+              <p className="text-gray-600">
+                Welcome back, {formatAddress(userAddress || '')}
+              </p>
+            </div>
+            <button
+              onClick={() => router.push('/dashboard/create')}
+              className="bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white px-6 py-3 rounded-lg font-medium flex items-center transition-colors"
             >
-              <svg className="-ml-1 mr-2 h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
-              </svg>
+              <Plus className="w-5 h-5 mr-2" />
               Create Contract
-            </a>
-            
-            <a
-              href="/dashboard/contracts"
-              className="flex items-center justify-center px-4 py-3 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 transition-colors"
-            >
-              <svg className="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              View All Contracts
-            </a>
-
-            <button
-              className="flex items-center justify-center px-4 py-3 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 transition-colors"
-              disabled
-            >
-              <svg className="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-              </svg>
-              Analytics (Soon)
-            </button>
-
-            <button
-              className="flex items-center justify-center px-4 py-3 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 transition-colors"
-              disabled
-            >
-              <svg className="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-              Settings (Soon)
             </button>
           </div>
         </div>
       </div>
 
-      {/* Recent Contracts */}
-      <div className="bg-white shadow rounded-lg">
-        <div className="px-4 py-5 sm:p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg leading-6 font-medium text-gray-900">
-              Recent Contracts
-            </h3>
-            {contracts.length > 6 && (
-              <a
-                href="/dashboard/contracts"
-                className="text-sm font-medium text-blue-600 hover:text-blue-500"
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Tab Navigation */}
+        <div className="mb-8">
+          <div className="border-b border-gray-200">
+            <nav className="-mb-px flex space-x-8">
+              <button
+                onClick={() => setActiveTab(UserRole.CLIENT)}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === UserRole.CLIENT
+                    ? 'border-orange-500 text-orange-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
               >
-                View all →
-              </a>
-            )}
+                <User className="w-4 h-4 inline mr-2" />
+                As Client
+              </button>
+              <button
+                onClick={() => setActiveTab(UserRole.FREELANCER)}
+                className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                  activeTab === UserRole.FREELANCER
+                    ? 'border-orange-500 text-orange-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <Briefcase className="w-4 h-4 inline mr-2" />
+                As Freelancer
+              </button>
+            </nav>
           </div>
-          
-          <ContractList 
-            contracts={recentContracts}
-            userAddress={userAddress || ''}
-            loading={loading}
-          />
+        </div>
+
+        {/* Stats Cards */}
+        <div className="mb-8">
+          <StatsCards stats={stats} role={activeTab} />
+        </div>
+
+        {/* Contracts Section */}
+        <div>
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-xl font-semibold text-gray-900">
+              {activeTab === UserRole.CLIENT ? 'Your Contracts' : 'Assigned Contracts'}
+            </h2>
+            <span className="text-sm text-gray-500">
+              {contracts.length} {contracts.length === 1 ? 'contract' : 'contracts'}
+            </span>
+          </div>
+
+          {contractsLoading ? (
+            <div className="flex justify-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
+            </div>
+          ) : contracts.length === 0 ? (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="text-center py-12 bg-white rounded-lg shadow-sm"
+            >
+              <div className="max-w-md mx-auto">
+                <div className="mb-4">
+                  {activeTab === UserRole.CLIENT ? (
+                    <Briefcase className="w-16 h-16 text-gray-300 mx-auto" />
+                  ) : (
+                    <User className="w-16 h-16 text-gray-300 mx-auto" />
+                  )}
+                </div>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                  {activeTab === UserRole.CLIENT 
+                    ? 'No contracts created yet' 
+                    : 'No contracts assigned to you'
+                  }
+                </h3>
+                <p className="text-gray-500 mb-6">
+                  {activeTab === UserRole.CLIENT
+                    ? 'Create your first contract to start working with freelancers securely.'
+                    : 'Contracts assigned to your address will appear here.'
+                  }
+                </p>
+                {activeTab === UserRole.CLIENT && (
+                  <button
+                    onClick={() => router.push('/dashboard/create')}
+                    className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded-lg font-medium transition-colors"
+                  >
+                    Create First Contract
+                  </button>
+                )}
+              </div>
+            </motion.div>
+          ) : (
+            <ContractList contracts={contracts} userRole={activeTab} userAddress={userAddress || ''} />
+          )}
         </div>
       </div>
     </div>
