@@ -24,7 +24,7 @@ import {
 const appConfig = new AppConfig(['store_write', 'publish_data']);
 const userSession = new UserSession({ appConfig });
 
-// Network configuration - Updated for proper env handling
+// Network configuration
 const getNetwork = () => {
   const networkType = process.env.NEXT_PUBLIC_NETWORK || 'testnet';
   return networkType === 'mainnet' ? STACKS_MAINNET : STACKS_TESTNET;
@@ -32,23 +32,26 @@ const getNetwork = () => {
 
 const network = getNetwork();
 
-// Contract addresses - Updated to use env variables
+// Contract addresses - Updated to match your deployment
 const getContractAddress = (contractName: string) => {
   const envKey = `NEXT_PUBLIC_${contractName.toUpperCase()}_CONTRACT`;
   const envAddress = process.env[envKey];
   
   if (envAddress) {
+    console.log(`✅ Found ${contractName} contract address in env:`, envAddress);
     return envAddress;
   }
   
-  // Fallback addresses
+  // Updated fallback addresses to match your deployment
   const fallbackMap = {
-    'ESCROW': 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.workshield-escrow',
-    'PAYMENTS': 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.workshield-payments', 
-    'DISPUTE': 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM.workshield-dispute'
+    'ESCROW': 'ST3A5HQKQM3T3BV1MCZ45S6Q729V8355BQ0W0NP2V.workshield-escrow',
+    'PAYMENTS': 'ST3A5HQKQM3T3BV1MCZ45S6Q729V8355BQ0W0NP2V.workshield-payments', 
+    'DISPUTE': 'ST3A5HQKQM3T3BV1MCZ45S6Q729V8355BQ0W0NP2V.workshield-dispute'
   };
   
-  return fallbackMap[contractName as keyof typeof fallbackMap] || '';
+  const fallbackAddress = fallbackMap[contractName as keyof typeof fallbackMap] || '';
+  console.log(`⚠️ Using fallback ${contractName} contract address:`, fallbackAddress);
+  return fallbackAddress;
 };
 
 const CONTRACTS = {
@@ -59,9 +62,12 @@ const CONTRACTS = {
 
 // Validate contract addresses on load
 const validateContracts = () => {
+  console.log('🔍 Validating contract addresses...');
   Object.entries(CONTRACTS).forEach(([name, address]) => {
     if (!address) {
-      console.error(`Missing contract address for ${name}. Check your .env.local file.`);
+      console.error(`❌ Missing contract address for ${name}. Check your .env.local file.`);
+    } else {
+      console.log(`✅ ${name}: ${address}`);
     }
   });
 };
@@ -82,27 +88,37 @@ export const useStacks = () => {
   const [userData, setUserData] = useState<any>(null);
   const [isSignedIn, setIsSignedIn] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [transactionInProgress, setTransactionInProgress] = useState(false);
 
   // Initialize user session
   useEffect(() => {
+    console.log('🔧 Initializing user session...');
     if (userSession.isSignInPending()) {
+      console.log('⏳ Sign in pending...');
       userSession.handlePendingSignIn().then((userData) => {
+        console.log('✅ Sign in completed:', userData);
         setUserData(userData);
         setIsSignedIn(true);
+        setLoading(false);
+      }).catch((error) => {
+        console.error('❌ Sign in error:', error);
         setLoading(false);
       });
     } else if (userSession.isUserSignedIn()) {
       const userData = userSession.loadUserData();
+      console.log('✅ User already signed in:', userData);
       setUserData(userData);
       setIsSignedIn(true);
       setLoading(false);
     } else {
+      console.log('📱 No user session found');
       setLoading(false);
     }
   }, []);
 
   // Connect wallet
   const connectWallet = useCallback(() => {
+    console.log('🔗 Connecting wallet...');
     showConnect({
       appDetails: {
         name: 'WorkShield',
@@ -110,7 +126,11 @@ export const useStacks = () => {
       },
       redirectTo: '/',
       onFinish: () => {
+        console.log('✅ Wallet connected, reloading...');
         window.location.reload();
+      },
+      onCancel: () => {
+        console.log('❌ Wallet connection cancelled');
       },
       userSession,
     });
@@ -118,13 +138,14 @@ export const useStacks = () => {
 
   // Disconnect wallet
   const disconnectWallet = useCallback(() => {
+    console.log('🔓 Disconnecting wallet...');
     userSession.signUserOut();
     setUserData(null);
     setIsSignedIn(false);
     window.location.href = '/';
   }, []);
 
-  // Generic contract call function
+  // Generic contract call function with enhanced logging
   const callContract = useCallback(({
     contractAddress,
     contractName,
@@ -134,33 +155,69 @@ export const useStacks = () => {
     onFinish,
     onCancel
   }: ContractCallOptions) => {
-    openContractCall({
-      network,
+    console.log('📞 Making contract call:', {
       contractAddress,
       contractName,
       functionName,
       functionArgs,
       postConditions,
-      postConditionMode: PostConditionMode.Deny,
-      onFinish: onFinish || ((data) => {
-        console.log('Transaction submitted:', data);
-      }),
-      onCancel: onCancel || (() => {
-        console.log('Transaction cancelled');
-      }),
+      networkType: network === STACKS_MAINNET ? 'mainnet' : 'testnet'
     });
+
+    setTransactionInProgress(true);
+
+    try {
+      openContractCall({
+        network,
+        contractAddress,
+        contractName,
+        functionName,
+        functionArgs,
+        postConditions,
+        postConditionMode: PostConditionMode.Deny,
+        onFinish: (data) => {
+          console.log('✅ Transaction submitted successfully:', data);
+          setTransactionInProgress(false);
+          if (onFinish) {
+            onFinish(data);
+          }
+        },
+        onCancel: () => {
+          console.log('❌ Transaction cancelled by user');
+          setTransactionInProgress(false);
+          if (onCancel) {
+            onCancel();
+          }
+        },
+      });
+    } catch (error: unknown) {
+      console.error('❌ Contract call error:', error);
+      setTransactionInProgress(false);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      alert(`Transaction failed: ${errorMessage}`);
+    }
   }, []);
 
-  // Create escrow contract
+  // Create escrow contract with enhanced error handling
   const createEscrow = useCallback((
     client: string,
     freelancer: string,
     description: string,
     endDate: number,
     totalAmount: number,
-    onFinish?: (data: any) => void
+    onFinish?: (data: any) => void,
+    onCancel?: () => void
   ) => {
+    console.log('🏗️ Creating escrow contract...');
+    
     if (!userData) {
+      console.error('❌ No user data available');
+      alert('Please connect your wallet first');
+      return;
+    }
+
+    if (!isSignedIn) {
+      console.error('❌ User not signed in');
       alert('Please connect your wallet first');
       return;
     }
@@ -168,11 +225,36 @@ export const useStacks = () => {
     // Get the correct address based on network
     const userAddress = userData.profile.stxAddress.testnet || userData.profile.stxAddress.mainnet;
     
+    if (!userAddress) {
+      console.error('❌ No user address found');
+      alert('Could not get your wallet address. Please reconnect your wallet.');
+      return;
+    }
+
+    console.log('👤 User address:', userAddress);
+    console.log('📋 Contract details:', {
+      client,
+      freelancer,
+      description,
+      endDate,
+      totalAmount: `${totalAmount} microSTX (${totalAmount / 1000000} STX)`
+    });
+    
     const postConditions = [
       Pc.principal(userAddress).willSendEq(totalAmount).ustx()
     ];
 
+    console.log('✅ Post conditions:', postConditions);
+
     const [contractAddress, contractName] = CONTRACTS.ESCROW.split('.');
+
+    if (!contractAddress || !contractName) {
+      console.error('❌ Invalid escrow contract address:', CONTRACTS.ESCROW);
+      alert('Contract address not configured properly. Please check environment variables.');
+      return;
+    }
+
+    console.log('📄 Contract to call:', { contractAddress, contractName });
 
     callContract({
       contractAddress,
@@ -186,9 +268,21 @@ export const useStacks = () => {
         uintCV(totalAmount)
       ],
       postConditions,
-      onFinish
+      onFinish: (data) => {
+        console.log('✅ Escrow creation successful:', data);
+        alert(`Contract created successfully! Transaction ID: ${data.txId}`);
+        if (onFinish) {
+          onFinish(data);
+        }
+      },
+      onCancel: () => {
+        console.log('❌ Escrow creation cancelled by user');
+        if (onCancel) {
+          onCancel();
+        }
+      }
     });
-  }, [userData, callContract]);
+  }, [userData, isSignedIn, callContract]);
 
   // Add milestone
   const addMilestone = useCallback((
@@ -323,6 +417,7 @@ export const useStacks = () => {
     userData,
     isSignedIn,
     loading,
+    transactionInProgress,
     userAddress: userData?.profile?.stxAddress?.testnet || userData?.profile?.stxAddress?.mainnet || null,
     connectWallet,
     disconnectWallet,
