@@ -13,16 +13,24 @@ import {
   STACKS_MAINNET 
 } from '@stacks/network';
 import {
-  PostConditionMode,
   stringUtf8CV,
   uintCV,
   standardPrincipalCV,
-  Pc
+  PostConditionMode,
+  Pc,
+  fetchCallReadOnlyFunction,
+  cvToJSON
 } from '@stacks/transactions';
 
-// App configuration
+// App configuration - exactly like official docs
 const appConfig = new AppConfig(['store_write', 'publish_data']);
 const userSession = new UserSession({ appConfig });
+
+// App details for wallet connection
+const appDetails = {
+  name: 'WorkShield',
+  icon: typeof window !== 'undefined' ? window.location.origin + '/favicon.ico' : '',
+};
 
 // Network configuration
 const getNetwork = () => {
@@ -32,56 +40,22 @@ const getNetwork = () => {
 
 const network = getNetwork();
 
-// Contract addresses - Updated to match your deployment
-const getContractAddress = (contractName: string) => {
-  const envKey = `NEXT_PUBLIC_${contractName.toUpperCase()}_CONTRACT`;
-  const envAddress = process.env[envKey];
-  
-  if (envAddress) {
-    console.log(`✅ Found ${contractName} contract address in env:`, envAddress);
-    return envAddress;
-  }
-  
-  // Updated fallback addresses to match your deployment
-  const fallbackMap = {
-    'ESCROW': 'ST3A5HQKQM3T3BV1MCZ45S6Q729V8355BQ0W0NP2V.workshield-escrow',
-    'PAYMENTS': 'ST3A5HQKQM3T3BV1MCZ45S6Q729V8355BQ0W0NP2V.workshield-payments', 
-    'DISPUTE': 'ST3A5HQKQM3T3BV1MCZ45S6Q729V8355BQ0W0NP2V.workshield-dispute'
-  };
-  
-  const fallbackAddress = fallbackMap[contractName as keyof typeof fallbackMap] || '';
-  console.log(`⚠️ Using fallback ${contractName} contract address:`, fallbackAddress);
-  return fallbackAddress;
-};
-
+// Contract addresses
 const CONTRACTS = {
-  ESCROW: getContractAddress('ESCROW'),
-  PAYMENTS: getContractAddress('PAYMENTS'),
-  DISPUTE: getContractAddress('DISPUTE')
+  ESCROW: process.env.NEXT_PUBLIC_ESCROW_CONTRACT || 'ST3A5HQKQM3T3BV1MCZ45S6Q729V8355BQ0W0NP2V.workshield-escrow',
+  PAYMENTS: process.env.NEXT_PUBLIC_PAYMENTS_CONTRACT || 'ST3A5HQKQM3T3BV1MCZ45S6Q729V8355BQ0W0NP2V.workshield-payments',
+  DISPUTE: process.env.NEXT_PUBLIC_DISPUTE_CONTRACT || 'ST3A5HQKQM3T3BV1MCZ45S6Q729V8355BQ0W0NP2V.workshield-dispute'
 };
 
-// Validate contract addresses on load
-const validateContracts = () => {
-  console.log('🔍 Validating contract addresses...');
-  Object.entries(CONTRACTS).forEach(([name, address]) => {
-    if (!address) {
-      console.error(`❌ Missing contract address for ${name}. Check your .env.local file.`);
-    } else {
-      console.log(`✅ ${name}: ${address}`);
-    }
-  });
-};
-
-validateContracts();
-
-interface ContractCallOptions {
-  contractAddress: string;
-  contractName: string;
-  functionName: string;
-  functionArgs: any[];
-  postConditions?: any[];
-  onFinish?: (data: any) => void;
-  onCancel?: () => void;
+// Extend Window interface for wallet providers
+declare global {
+  interface Window {
+    StacksProvider?: any;
+    LeatherProvider?: any;
+    XverseProviders?: {
+      StacksProvider?: any;
+    };
+  }
 }
 
 export const useStacks = () => {
@@ -90,9 +64,10 @@ export const useStacks = () => {
   const [loading, setLoading] = useState(true);
   const [transactionInProgress, setTransactionInProgress] = useState(false);
 
-  // Initialize user session
+  // Initialize user session - exactly like official docs
   useEffect(() => {
     console.log('🔧 Initializing user session...');
+    
     if (userSession.isSignInPending()) {
       console.log('⏳ Sign in pending...');
       userSession.handlePendingSignIn().then((userData) => {
@@ -116,15 +91,11 @@ export const useStacks = () => {
     }
   }, []);
 
-  // Connect wallet
+  // Connect wallet - exactly like official docs
   const connectWallet = useCallback(() => {
     console.log('🔗 Connecting wallet...');
     showConnect({
-      appDetails: {
-        name: 'WorkShield',
-        icon: window.location.origin + '/favicon.ico',
-      },
-      redirectTo: '/',
+      appDetails,
       onFinish: () => {
         console.log('✅ Wallet connected, reloading...');
         window.location.reload();
@@ -145,90 +116,29 @@ export const useStacks = () => {
     window.location.href = '/';
   }, []);
 
-  // Generic contract call function with enhanced logging
-  const callContract = useCallback(({
-    contractAddress,
-    contractName,
-    functionName,
-    functionArgs,
-    postConditions = [],
-    onFinish,
-    onCancel
-  }: ContractCallOptions) => {
-    console.log('📞 Making contract call:', {
-      contractAddress,
-      contractName,
-      functionName,
-      functionArgs,
-      postConditions,
-      networkType: network === STACKS_MAINNET ? 'mainnet' : 'testnet'
-    });
-
-    setTransactionInProgress(true);
-
-    try {
-      openContractCall({
-        network,
-        contractAddress,
-        contractName,
-        functionName,
-        functionArgs,
-        postConditions,
-        postConditionMode: PostConditionMode.Deny,
-        onFinish: (data) => {
-          console.log('✅ Transaction submitted successfully:', data);
-          setTransactionInProgress(false);
-          if (onFinish) {
-            onFinish(data);
-          }
-        },
-        onCancel: () => {
-          console.log('❌ Transaction cancelled by user');
-          setTransactionInProgress(false);
-          if (onCancel) {
-            onCancel();
-          }
-        },
-      });
-    } catch (error: unknown) {
-      console.error('❌ Contract call error:', error);
-      setTransactionInProgress(false);
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      alert(`Transaction failed: ${errorMessage}`);
-    }
-  }, []);
-
-  // Create escrow contract with enhanced error handling
-  const createEscrow = useCallback((
+  // Create escrow using the EXACT pattern from official Stacks docs
+  const createEscrow = useCallback(async (
     client: string,
     freelancer: string,
     description: string,
     endDate: number,
-    totalAmount: number,
-    onFinish?: (data: any) => void,
-    onCancel?: () => void
-  ) => {
+    totalAmount: number
+  ): Promise<{ success: boolean; txId?: string; error?: string }> => {
     console.log('🏗️ Creating escrow contract...');
     
     if (!userData) {
-      console.error('❌ No user data available');
-      alert('Please connect your wallet first');
-      return;
+      return { success: false, error: 'Please connect your wallet first' };
     }
 
     if (!isSignedIn) {
-      console.error('❌ User not signed in');
-      alert('Please connect your wallet first');
-      return;
+      return { success: false, error: 'Please connect your wallet first' };
     }
 
-    // Get the correct address based on network
-    const userAddress = userData.profile.stxAddress.testnet || userData.profile.stxAddress.mainnet;
+    // Get user address
+    const userAddress = userData.profile?.stxAddress?.testnet || userData.profile?.stxAddress?.mainnet;
     
     if (!userAddress) {
-      console.error('❌ No user address found');
-      alert('Could not get your wallet address. Please reconnect your wallet.');
-      return;
+      return { success: false, error: 'Could not get your wallet address. Please reconnect your wallet.' };
     }
 
     console.log('👤 User address:', userAddress);
@@ -239,179 +149,255 @@ export const useStacks = () => {
       endDate,
       totalAmount: `${totalAmount} microSTX (${totalAmount / 1000000} STX)`
     });
-    
+
+    // Split contract address and name
+    const [contractAddress, contractName] = CONTRACTS.ESCROW.split('.');
+
+    if (!contractAddress || !contractName) {
+      return { success: false, error: 'Contract address not configured properly' };
+    }
+
+    // Create post conditions
     const postConditions = [
       Pc.principal(userAddress).willSendEq(totalAmount).ustx()
     ];
 
     console.log('✅ Post conditions:', postConditions);
-
-    const [contractAddress, contractName] = CONTRACTS.ESCROW.split('.');
-
-    if (!contractAddress || !contractName) {
-      console.error('❌ Invalid escrow contract address:', CONTRACTS.ESCROW);
-      alert('Contract address not configured properly. Please check environment variables.');
-      return;
-    }
-
     console.log('📄 Contract to call:', { contractAddress, contractName });
 
-    callContract({
-      contractAddress,
-      contractName,
-      functionName: 'create-escrow',
-      functionArgs: [
-        standardPrincipalCV(client),
-        standardPrincipalCV(freelancer),
-        stringUtf8CV(description),
-        uintCV(endDate),
-        uintCV(totalAmount)
-      ],
-      postConditions,
-      onFinish: (data) => {
-        console.log('✅ Escrow creation successful:', data);
-        alert(`Contract created successfully! Transaction ID: ${data.txId}`);
-        if (onFinish) {
-          onFinish(data);
+    // Use the EXACT pattern from official Stacks documentation
+    try {
+      setTransactionInProgress(true);
+      
+      const options = {
+        contractAddress,
+        contractName,
+        functionName: 'create-escrow',
+        functionArgs: [
+          standardPrincipalCV(client),
+          standardPrincipalCV(freelancer),
+          stringUtf8CV(description),
+          uintCV(endDate),
+          uintCV(totalAmount)
+        ],
+        network,
+        appDetails,
+        postConditions,
+        postConditionMode: PostConditionMode.Deny,
+        onFinish: (data: any) => {
+          console.log('✅ Escrow creation successful:', data);
+          setTransactionInProgress(false);
+          // Note: data.txId might be data.txid depending on version
+          const txId = data.txId || data.txid;
+          return { success: true, txId };
+        },
+        onCancel: () => {
+          console.log('❌ Escrow creation cancelled by user');
+          setTransactionInProgress(false);
+          return { success: false, error: 'Transaction cancelled by user' };
         }
-      },
-      onCancel: () => {
-        console.log('❌ Escrow creation cancelled by user');
-        if (onCancel) {
-          onCancel();
-        }
+      };
+
+      console.log('🚀 Calling openContractCall with options:', options);
+      
+      // This is the exact same pattern used by Gamma and official docs
+      await openContractCall(options);
+      
+      // Return success (the actual result comes through onFinish callback)
+      return { success: true };
+      
+    } catch (error: any) {
+      console.error('❌ Contract call error:', error);
+      setTransactionInProgress(false);
+      
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      
+      // Provide specific error messages for common issues
+      if (errorMessage.includes('wallet') || errorMessage.includes('extension')) {
+        return { success: false, error: 'Wallet connection issue. Please ensure a Stacks wallet is installed and connected.' };
+      } else if (errorMessage.includes('network')) {
+        return { success: false, error: 'Network issue. Please ensure your wallet is connected to Stacks testnet.' };
+      } else {
+        return { success: false, error: `Transaction failed: ${errorMessage}` };
       }
-    });
-  }, [userData, isSignedIn, callContract]);
+    }
+  }, [userData, isSignedIn]);
 
   // Add milestone
-  const addMilestone = useCallback((
+  const addMilestone = useCallback(async (
     contractId: number,
     description: string,
     amount: number,
-    deadline: number,
-    onFinish?: (data: any) => void
-  ) => {
-    if (!userData) return;
+    deadline: number
+  ): Promise<{ success: boolean; txId?: string; error?: string }> => {
+    if (!userData) return { success: false, error: 'Not connected' };
 
     const [contractAddress, contractName] = CONTRACTS.ESCROW.split('.');
 
-    callContract({
-      contractAddress,
-      contractName,
-      functionName: 'add-milestone',
-      functionArgs: [
-        uintCV(contractId),
-        stringUtf8CV(description),
-        uintCV(amount),
-        uintCV(deadline)
-      ],
-      onFinish
-    });
-  }, [userData, callContract]);
+    try {
+      setTransactionInProgress(true);
+      
+      const options = {
+        contractAddress,
+        contractName,
+        functionName: 'add-milestone',
+        functionArgs: [
+          uintCV(contractId),
+          stringUtf8CV(description),
+          uintCV(amount),
+          uintCV(deadline)
+        ],
+        network,
+        appDetails,
+        onFinish: (data: any) => {
+          setTransactionInProgress(false);
+          const txId = data.txId || data.txid;
+          return { success: true, txId };
+        },
+        onCancel: () => {
+          setTransactionInProgress(false);
+          return { success: false, error: 'Transaction cancelled' };
+        }
+      };
+
+      await openContractCall(options);
+      return { success: true };
+      
+    } catch (error: any) {
+      setTransactionInProgress(false);
+      return { success: false, error: error.message };
+    }
+  }, [userData]);
 
   // Submit milestone
-  const submitMilestone = useCallback((
+  const submitMilestone = useCallback(async (
     contractId: number,
     milestoneId: number,
-    submissionNotes: string,
-    onFinish?: (data: any) => void
-  ) => {
-    if (!userData) return;
+    submissionNotes: string
+  ): Promise<{ success: boolean; txId?: string; error?: string }> => {
+    if (!userData) return { success: false, error: 'Not connected' };
 
     const [contractAddress, contractName] = CONTRACTS.ESCROW.split('.');
 
-    callContract({
-      contractAddress,
-      contractName,
-      functionName: 'submit-milestone',
-      functionArgs: [
-        uintCV(contractId),
-        uintCV(milestoneId),
-        stringUtf8CV(submissionNotes)
-      ],
-      onFinish
-    });
-  }, [userData, callContract]);
+    try {
+      setTransactionInProgress(true);
+      
+      const options = {
+        contractAddress,
+        contractName,
+        functionName: 'submit-milestone',
+        functionArgs: [
+          uintCV(contractId),
+          uintCV(milestoneId),
+          stringUtf8CV(submissionNotes)
+        ],
+        network,
+        appDetails,
+        onFinish: (data: any) => {
+          setTransactionInProgress(false);
+          const txId = data.txId || data.txid;
+          return { success: true, txId };
+        },
+        onCancel: () => {
+          setTransactionInProgress(false);
+          return { success: false, error: 'Transaction cancelled' };
+        }
+      };
+
+      await openContractCall(options);
+      return { success: true };
+      
+    } catch (error: any) {
+      setTransactionInProgress(false);
+      return { success: false, error: error.message };
+    }
+  }, [userData]);
 
   // Approve milestone
-  const approveMilestone = useCallback((
+  const approveMilestone = useCallback(async (
     contractId: number,
-    milestoneId: number,
-    onFinish?: (data: any) => void
-  ) => {
-    if (!userData) return;
+    milestoneId: number
+  ): Promise<{ success: boolean; txId?: string; error?: string }> => {
+    if (!userData) return { success: false, error: 'Not connected' };
 
     const [contractAddress, contractName] = CONTRACTS.ESCROW.split('.');
 
-    callContract({
-      contractAddress,
-      contractName,
-      functionName: 'approve-milestone',
-      functionArgs: [
-        uintCV(contractId),
-        uintCV(milestoneId)
-      ],
-      onFinish
-    });
-  }, [userData, callContract]);
+    try {
+      setTransactionInProgress(true);
+      
+      const options = {
+        contractAddress,
+        contractName,
+        functionName: 'approve-milestone',
+        functionArgs: [
+          uintCV(contractId),
+          uintCV(milestoneId)
+        ],
+        network,
+        appDetails,
+        onFinish: (data: any) => {
+          setTransactionInProgress(false);
+          const txId = data.txId || data.txid;
+          return { success: true, txId };
+        },
+        onCancel: () => {
+          setTransactionInProgress(false);
+          return { success: false, error: 'Transaction cancelled' };
+        }
+      };
+
+      await openContractCall(options);
+      return { success: true };
+      
+    } catch (error: any) {
+      setTransactionInProgress(false);
+      return { success: false, error: error.message };
+    }
+  }, [userData]);
 
   // Reject milestone
-  const rejectMilestone = useCallback((
+  const rejectMilestone = useCallback(async (
     contractId: number,
     milestoneId: number,
-    reason: string,
-    onFinish?: (data: any) => void
-  ) => {
-    if (!userData) return;
+    reason: string
+  ): Promise<{ success: boolean; txId?: string; error?: string }> => {
+    if (!userData) return { success: false, error: 'Not connected' };
 
     const [contractAddress, contractName] = CONTRACTS.ESCROW.split('.');
 
-    callContract({
-      contractAddress,
-      contractName,
-      functionName: 'reject-milestone',
-      functionArgs: [
-        uintCV(contractId),
-        uintCV(milestoneId),
-        stringUtf8CV(reason)
-      ],
-      onFinish
-    });
-  }, [userData, callContract]);
+    try {
+      setTransactionInProgress(true);
+      
+      const options = {
+        contractAddress,
+        contractName,
+        functionName: 'reject-milestone',
+        functionArgs: [
+          uintCV(contractId),
+          uintCV(milestoneId),
+          stringUtf8CV(reason)
+        ],
+        network,
+        appDetails,
+        onFinish: (data: any) => {
+          setTransactionInProgress(false);
+          const txId = data.txId || data.txid;
+          return { success: true, txId };
+        },
+        onCancel: () => {
+          setTransactionInProgress(false);
+          return { success: false, error: 'Transaction cancelled' };
+        }
+      };
 
-  // Create dispute
-  const createDispute = useCallback((
-    contractId: number,
-    reason: string,
-    onFinish?: (data: any) => void
-  ) => {
-    if (!userData) return;
-
-    const [contractAddress, contractName] = CONTRACTS.DISPUTE.split('.');
-
-    callContract({
-      contractAddress,
-      contractName,
-      functionName: 'open-dispute',
-      functionArgs: [
-        uintCV(contractId),
-        standardPrincipalCV(userData.profile.stxAddress.testnet || userData.profile.stxAddress.mainnet),
-        standardPrincipalCV(userData.profile.stxAddress.testnet || userData.profile.stxAddress.mainnet), 
-        stringUtf8CV(reason)
-      ],
-      onFinish
-    });
-  }, [userData, callContract]);
-
-  // Get network info
-  const getNetworkInfo = useCallback(() => {
-    return {
-      network: process.env.NEXT_PUBLIC_NETWORK || 'testnet',
-      apiUrl: process.env.NEXT_PUBLIC_STACKS_API_URL || 'https://api.testnet.hiro.so',
-      explorerUrl: process.env.NEXT_PUBLIC_STACKS_EXPLORER_URL || 'https://explorer.hiro.so/?chain=testnet'
-    };
-  }, []);
+      await openContractCall(options);
+      return { success: true };
+      
+    } catch (error: any) {
+      setTransactionInProgress(false);
+      return { success: false, error: error.message };
+    }
+  }, [userData]);
 
   return {
     userData,
@@ -421,15 +407,12 @@ export const useStacks = () => {
     userAddress: userData?.profile?.stxAddress?.testnet || userData?.profile?.stxAddress?.mainnet || null,
     connectWallet,
     disconnectWallet,
-    callContract,
     createEscrow,
     addMilestone,
     submitMilestone,
     approveMilestone,
     rejectMilestone,
-    createDispute,
     network,
-    networkInfo: getNetworkInfo(),
     contracts: CONTRACTS
   };
 };
