@@ -21,6 +21,7 @@ import {
   fetchCallReadOnlyFunction,
   cvToJSON
 } from '@stacks/transactions';
+import { Contract, Milestone } from '@/types';
 
 // App configuration - exactly like official docs
 const appConfig = new AppConfig(['store_write', 'publish_data']);
@@ -50,13 +51,34 @@ const CONTRACTS = {
 // Extend Window interface for wallet providers
 declare global {
   interface Window {
-    StacksProvider?: any;
     LeatherProvider?: any;
     XverseProviders?: {
       StacksProvider?: any;
     };
+    HiroWallet?: any;
+    blockstack?: any;
   }
 }
+
+// Log contract addresses for debugging
+console.log('📄 Contract addresses loaded:');
+Object.entries(CONTRACTS).forEach(([key, address]) => {
+  if (address.includes('ST3A5HQKQM3T3BV1MCZ45S6Q729V8355BQ0W0NP2V')) {
+    console.log(`⚠️ Using fallback ${key} contract address: ${address}`);
+  } else {
+    console.log(`✅ Using configured ${key} contract address: ${address}`);
+  }
+});
+
+// Validate contract addresses
+console.log('🔍 Validating contract addresses...');
+Object.entries(CONTRACTS).forEach(([key, address]) => {
+  if (address && address.includes('.')) {
+    console.log(`✅ ${key}: ${address}`);
+  } else {
+    console.error(`❌ Invalid ${key} contract address: ${address}`);
+  }
+});
 
 export const useStacks = () => {
   const [userData, setUserData] = useState<any>(null);
@@ -124,48 +146,10 @@ export const useStacks = () => {
     endDate: number,
     totalAmount: number
   ): Promise<{ success: boolean; txId?: string; error?: string }> => {
-    console.log('🏗️ Creating escrow contract...');
-    
-    if (!userData) {
-      return { success: false, error: 'Please connect your wallet first' };
-    }
+    if (!userData) return { success: false, error: 'Not connected' };
 
-    if (!isSignedIn) {
-      return { success: false, error: 'Please connect your wallet first' };
-    }
-
-    // Get user address
-    const userAddress = userData.profile?.stxAddress?.testnet || userData.profile?.stxAddress?.mainnet;
-    
-    if (!userAddress) {
-      return { success: false, error: 'Could not get your wallet address. Please reconnect your wallet.' };
-    }
-
-    console.log('👤 User address:', userAddress);
-    console.log('📋 Contract details:', {
-      client,
-      freelancer,
-      description,
-      endDate,
-      totalAmount: `${totalAmount} microSTX (${totalAmount / 1000000} STX)`
-    });
-
-    // Split contract address and name
     const [contractAddress, contractName] = CONTRACTS.ESCROW.split('.');
 
-    if (!contractAddress || !contractName) {
-      return { success: false, error: 'Contract address not configured properly' };
-    }
-
-    // Create post conditions
-    const postConditions = [
-      Pc.principal(userAddress).willSendEq(totalAmount).ustx()
-    ];
-
-    console.log('✅ Post conditions:', postConditions);
-    console.log('📄 Contract to call:', { contractAddress, contractName });
-
-    // Use the EXACT pattern from official Stacks documentation
     try {
       setTransactionInProgress(true);
       
@@ -175,41 +159,29 @@ export const useStacks = () => {
         functionName: 'create-escrow',
         functionArgs: [
           standardPrincipalCV(client),
-          standardPrincipalCV(freelancer),
+          standardPrincipalCV(freelancer), 
           stringUtf8CV(description),
           uintCV(endDate),
           uintCV(totalAmount)
         ],
         network,
         appDetails,
-        postConditions,
-        postConditionMode: PostConditionMode.Deny,
         onFinish: (data: any) => {
-          console.log('✅ Escrow creation successful:', data);
           setTransactionInProgress(false);
-          // Note: data.txId might be data.txid depending on version
           const txId = data.txId || data.txid;
           return { success: true, txId };
         },
         onCancel: () => {
-          console.log('❌ Escrow creation cancelled by user');
           setTransactionInProgress(false);
-          return { success: false, error: 'Transaction cancelled by user' };
+          return { success: false, error: 'Transaction cancelled' };
         }
       };
 
-      console.log('🚀 Calling openContractCall with options:', options);
-      
-      // This is the exact same pattern used by Gamma and official docs
       await openContractCall(options);
-      
-      // Return success (the actual result comes through onFinish callback)
       return { success: true };
       
     } catch (error: any) {
-      console.error('❌ Contract call error:', error);
       setTransactionInProgress(false);
-      
       const errorMessage = error instanceof Error ? error.message : String(error);
       
       // Provide specific error messages for common issues
@@ -399,6 +371,190 @@ export const useStacks = () => {
     }
   }, [userData]);
 
+  // Fetch all contracts for a user
+  const fetchUserContracts = useCallback(async (userAddress: string): Promise<Contract[]> => {
+    console.log('🚀 fetchUserContracts called with address:', userAddress);
+    console.log('🏠 Using contract address:', CONTRACTS.ESCROW);
+    try {
+      const [contractAddress, contractName] = CONTRACTS.ESCROW.split('.');
+      console.log('📝 Split contract - Address:', contractAddress, 'Name:', contractName);
+      const contracts: Contract[] = [];
+      
+      // Since we don't have a "get all contracts" function, we'll need to query by contract ID
+      // In a real implementation, you'd need to track contract IDs or have a registry
+      
+      for (let contractId = 1; contractId <= 50; contractId++) { // Check first 10 contracts
+        try {
+          const result = await fetchCallReadOnlyFunction({
+            network,
+            contractAddress,
+            contractName,
+            functionName: 'get-contract',
+            functionArgs: [uintCV(contractId)],
+            senderAddress: userAddress,
+          });
+
+          const contractData = cvToJSON(result);
+          console.log(`🔍 Contract ${contractId} raw data:`, contractData);
+          
+          if (contractData.value && contractData.value.value) {
+            const contract = contractData.value.value;
+            console.log(`📋 Contract ${contractId} parsed:`, contract);
+
+            // Extract the actual string values from the nested structure
+            const clientAddress = contract.client?.value || '';
+            const freelancerAddress = contract.freelancer?.value || '';
+            
+            console.log(`👤 Client: ${clientAddress}, Freelancer: ${freelancerAddress}, User: ${userAddress}`);
+            
+            // Check if user is either client or freelancer
+            if (clientAddress === userAddress || freelancerAddress === userAddress) {
+              console.log(`✅ User matches! Adding contract ${contractId}`);
+              // Fetch milestone count
+              const milestoneCountResult = await fetchCallReadOnlyFunction({
+                network,
+                contractAddress,
+                contractName,
+                functionName: 'get-milestone-count',
+                functionArgs: [uintCV(contractId)],
+                senderAddress: userAddress,
+              });
+
+              const milestoneCount = cvToJSON(milestoneCountResult).value || 0;
+              
+              // Fetch all milestones for this contract
+              const milestones = [];
+              for (let milestoneId = 1; milestoneId <= milestoneCount; milestoneId++) {
+                const milestoneResult = await fetchCallReadOnlyFunction({
+                  network,
+                  contractAddress,
+                  contractName,
+                  functionName: 'get-milestone',
+                  functionArgs: [uintCV(contractId), uintCV(milestoneId)],
+                  senderAddress: userAddress,
+                });
+
+                const milestoneData = cvToJSON(milestoneResult);
+                if (milestoneData.success && milestoneData.value) {
+                  milestones.push({
+                    id: milestoneId,
+                    description: milestoneData.value.description,
+                    amount: parseInt(milestoneData.value.amount),
+                    deadline: parseInt(milestoneData.value.deadline) * 1000, // Convert to milliseconds
+                    status: milestoneData.value.status,
+                    submissionNotes: milestoneData.value.submissionNotes || '',
+                    rejectionReason: milestoneData.value.rejectionReason || '',
+                    submittedAt: milestoneData.value.submittedAt ? parseInt(milestoneData.value.submittedAt) * 1000 : undefined,
+                    approvedAt: milestoneData.value.approvedAt ? parseInt(milestoneData.value.approvedAt) * 1000 : undefined,
+                  });
+                }
+              }
+
+              contracts.push({
+                id: contractId,
+                client: clientAddress,
+                freelancer: freelancerAddress,
+                description: contract.description?.value || '',
+                totalAmount: parseInt(contract['total-amount']?.value || '0'),
+                remainingBalance: parseInt(contract['remaining-balance']?.value || '0'),
+                endDate: parseInt(contract['end-date']?.value || '0') * 1000,
+                status: parseInt(contract.status?.value || '0'),
+                milestones: milestones,
+              });
+            }
+          }
+        } catch (error) {
+          // Contract doesn't exist or error fetching, continue to next
+          console.log(`Contract ${contractId} not found or error:`, error);
+        }
+      }
+
+      return contracts;
+    } catch (error) {
+      console.error('Error fetching user contracts:', error);
+      return [];
+    }
+  }, [network]);
+
+  // Fetch a specific contract by ID
+  const fetchContractById = useCallback(async (contractId: number): Promise<Contract | null> => {
+    try {
+      const [contractAddress, contractName] = CONTRACTS.ESCROW.split('.');
+      
+      const result = await fetchCallReadOnlyFunction({
+        network,
+        contractAddress,
+        contractName,
+        functionName: 'get-contract',
+        functionArgs: [uintCV(contractId)],
+        senderAddress: userData?.profile?.stxAddress?.testnet || userData?.profile?.stxAddress?.mainnet || '',
+      });
+
+      const contractData = cvToJSON(result);
+      
+      if (contractData.success && contractData.value) {
+        const contract = contractData.value;
+        
+        // Fetch milestone count
+        const milestoneCountResult = await fetchCallReadOnlyFunction({
+          network,
+          contractAddress,
+          contractName,
+          functionName: 'get-milestone-count',
+          functionArgs: [uintCV(contractId)],
+          senderAddress: userData?.profile?.stxAddress?.testnet || userData?.profile?.stxAddress?.mainnet || '',
+        });
+
+        const milestoneCount = cvToJSON(milestoneCountResult).value || 0;
+        
+        // Fetch all milestones
+        const milestones = [];
+        for (let milestoneId = 1; milestoneId <= milestoneCount; milestoneId++) {
+          const milestoneResult = await fetchCallReadOnlyFunction({
+            network,
+            contractAddress,
+            contractName,
+            functionName: 'get-milestone',
+            functionArgs: [uintCV(contractId), uintCV(milestoneId)],
+            senderAddress: userData?.profile?.stxAddress?.testnet || userData?.profile?.stxAddress?.mainnet || '',
+          });
+
+          const milestoneData = cvToJSON(milestoneResult);
+          if (milestoneData.success && milestoneData.value) {
+            milestones.push({
+              id: milestoneId,
+              description: milestoneData.value.description,
+              amount: parseInt(milestoneData.value.amount),
+              deadline: parseInt(milestoneData.value.deadline) * 1000,
+              status: milestoneData.value.status,
+              submissionNotes: milestoneData.value.submissionNotes || '',
+              rejectionReason: milestoneData.value.rejectionReason || '',
+              submittedAt: milestoneData.value.submittedAt ? parseInt(milestoneData.value.submittedAt) * 1000 : undefined,
+              approvedAt: milestoneData.value.approvedAt ? parseInt(milestoneData.value.approvedAt) * 1000 : undefined,
+            });
+          }
+        }
+
+        return {
+          id: contractId,
+          client: contract.client,
+          freelancer: contract.freelancer,
+          description: contract.description,
+          totalAmount: parseInt(contract.totalAmount),
+          remainingBalance: parseInt(contract.remainingBalance),
+          endDate: parseInt(contract.endDate) * 1000,
+          status: contract.status,
+          milestones: milestones,
+        };
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Error fetching contract:', error);
+      return null;
+    }
+  }, [network, userData]);
+
   return {
     userData,
     isSignedIn,
@@ -412,6 +568,8 @@ export const useStacks = () => {
     submitMilestone,
     approveMilestone,
     rejectMilestone,
+    fetchUserContracts,
+    fetchContractById,
     network,
     contracts: CONTRACTS
   };
