@@ -13,7 +13,7 @@ export const metadata: Metadata = {
     title: 'WorkShield - Secure Milestone Payments on Bitcoin',
     description: 'Trustless milestone-based payment contracts with Bitcoin-level security',
     type: 'website',
-    url: 'https://workshield.app',
+    // url: 'https://workshield.app',
   },
   twitter: {
     card: 'summary_large_image',
@@ -34,7 +34,7 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <meta name="theme-color" content="#ea580c" />
       </head>
-      <body className={inter.className}>
+      <body className={inter.className} suppressHydrationWarning={true}>
         <div id="root">{children}</div>
       </body>
     </html>

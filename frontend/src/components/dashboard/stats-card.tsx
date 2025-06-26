@@ -1,13 +1,13 @@
 'use client';
 
-import { DashboardStats } from '@/types';
+import { DashboardStats, UserRole } from '@/types';
 
 interface StatsCardsProps {
   stats: DashboardStats;
-  userRole: 'client' | 'freelancer';
+  role: UserRole;
 }
 
-export default function StatsCards({ stats, userRole }: StatsCardsProps) {
+export default function StatsCards({ stats, role }: StatsCardsProps) {
   const formatSTX = (amount: number) => {
     return `${(amount / 1000000).toFixed(2)} STX`;
   };
@@ -98,7 +98,7 @@ export default function StatsCards({ stats, userRole }: StatsCardsProps) {
     }
   ];
 
-  const statsToShow = userRole === 'client' ? clientStats : freelancerStats;
+  const statsToShow = role === UserRole.CLIENT ? clientStats : freelancerStats;
 
   return (
     <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">

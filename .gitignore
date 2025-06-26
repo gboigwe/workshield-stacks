@@ -15,3 +15,11 @@ node_modules
 # env files (can opt-in for committing if needed)
 .env*
 .env.local*
+
+# Deployment plans with real data
+deployments/default.testnet-plan.yaml
+deployments/default.mainnet-plan.yaml
+deployments/default.devnet-plan.yaml
+
+# Keep only examples
+!deployments/*.example

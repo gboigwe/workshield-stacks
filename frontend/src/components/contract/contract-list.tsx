@@ -6,18 +6,14 @@ import ContractCard from './contract-card';
 
 interface ContractListProps {
   contracts: Contract[];
+  userRole: UserRole;
   userAddress: string;
   loading?: boolean;
 }
 
-export default function ContractList({ contracts, userAddress, loading = false }: ContractListProps) {
+export default function ContractList({ contracts, userRole, userAddress, loading = false }: ContractListProps) {
   const [statusFilter, setStatusFilter] = useState<ContractStatus | 'all'>('all');
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'amount' | 'deadline'>('newest');
-
-  // Determine user role for each contract
-  const getUserRole = (contract: Contract): UserRole => {
-    return contract.client === userAddress ? UserRole.CLIENT : UserRole.FREELANCER;
-  };
 
   // Filter contracts based on status
   const filteredContracts = contracts.filter(contract => {
@@ -46,6 +42,17 @@ export default function ContractList({ contracts, userAddress, loading = false }
     return contracts.filter(c => c.status === status).length;
   };
 
+  const getStatusName = (status: ContractStatus | 'all') => {
+    switch (status) {
+      case 'all': return 'All';
+      case ContractStatus.ACTIVE: return 'Active';
+      case ContractStatus.COMPLETED: return 'Completed';
+      case ContractStatus.DISPUTED: return 'Disputed';
+      case ContractStatus.CANCELLED: return 'Cancelled';
+      default: return 'Unknown';
+    }
+  };
+
   if (loading) {
     return (
       <div className="space-y-4">
@@ -62,7 +69,7 @@ export default function ContractList({ contracts, userAddress, loading = false }
 
   if (contracts.length === 0) {
     return (
-      <div className="text-center py-12">
+      <div className="text-center py-12 bg-white rounded-lg shadow-sm">
         <svg
           className="mx-auto h-12 w-12 text-gray-400"
           fill="none"
@@ -78,19 +85,24 @@ export default function ContractList({ contracts, userAddress, loading = false }
         </svg>
         <h3 className="mt-2 text-sm font-medium text-gray-900">No contracts</h3>
         <p className="mt-1 text-sm text-gray-500">
-          Get started by creating your first contract.
+          {userRole === UserRole.CLIENT 
+            ? 'Get started by creating your first contract.'
+            : 'Contracts assigned to you will appear here.'
+          }
         </p>
-        <div className="mt-6">
-          <a
-            href="/dashboard/create"
-            className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
-          >
-            <svg className="-ml-1 mr-2 h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
-            </svg>
-            Create Contract
-          </a>
-        </div>
+        {userRole === UserRole.CLIENT && (
+          <div className="mt-6">
+            <a
+              href="/dashboard/create"
+              className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-orange-600 hover:bg-orange-700"
+            >
+              <svg className="-ml-1 mr-2 h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+              </svg>
+              Create Contract
+            </a>
+          </div>
+        )}
       </div>
     );
   }
@@ -103,22 +115,18 @@ export default function ContractList({ contracts, userAddress, loading = false }
           {/* Status Filter */}
           <div className="flex items-center space-x-4">
             <span className="text-sm font-medium text-gray-700">Filter by status:</span>
-            <div className="flex space-x-2">
+            <div className="flex flex-wrap gap-2">
               {(['all', ContractStatus.ACTIVE, ContractStatus.COMPLETED, ContractStatus.DISPUTED] as const).map((status) => (
                 <button
                   key={status}
                   onClick={() => setStatusFilter(status)}
                   className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
                     statusFilter === status
-                      ? 'bg-blue-100 text-blue-800'
+                      ? 'bg-orange-100 text-orange-800'
                       : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                   }`}
                 >
-                  {status === 'all' ? 'All' : 
-                   status === ContractStatus.ACTIVE ? 'Active' :
-                   status === ContractStatus.COMPLETED ? 'Completed' :
-                   status === ContractStatus.DISPUTED ? 'Disputed' : 'Cancelled'} 
-                  ({getStatusCount(status)})
+                  {getStatusName(status)} ({getStatusCount(status)})
                 </button>
               ))}
             </div>
@@ -130,7 +138,7 @@ export default function ContractList({ contracts, userAddress, loading = false }
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as any)}
-              className="border border-gray-300 rounded-md px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="border border-gray-300 rounded-md px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
             >
               <option value="newest">Newest first</option>
               <option value="oldest">Oldest first</option>
@@ -143,31 +151,20 @@ export default function ContractList({ contracts, userAddress, loading = false }
 
       {/* Contract Cards */}
       {sortedContracts.length === 0 ? (
-        <div className="text-center py-8">
-          <p className="text-gray-500">No contracts match the current filter.</p>
+        <div className="text-center py-8 bg-white rounded-lg shadow-sm">
+          <p className="text-gray-500">No contracts match the selected filters.</p>
         </div>
       ) : (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-6">
           {sortedContracts.map((contract) => (
-            <ContractCard
-              key={contract.id}
-              contract={contract}
-              userRole={getUserRole(contract)}
-              userAddress={userAddress}
-              // These would come from milestone data in a real implementation
-              milestoneCount={Math.floor(Math.random() * 5) + 1}
-              completedMilestones={Math.floor(Math.random() * 3)}
-              nextDeadline={contract.status === ContractStatus.ACTIVE ? 
-                Date.now() + Math.random() * 30 * 24 * 60 * 60 * 1000 : undefined}
+            <ContractCard 
+              key={contract.id} 
+              contract={contract} 
+              userRole={userRole}
             />
           ))}
         </div>
       )}
-
-      {/* Results Summary */}
-      <div className="text-center text-sm text-gray-500">
-        Showing {sortedContracts.length} of {contracts.length} contracts
-      </div>
     </div>
   );
 }
