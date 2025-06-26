@@ -48,7 +48,7 @@ export default function CreateContractPage() {
     createEscrow, 
     transactionInProgress, 
     network,
-    connectWallet  // ✅ Import connectWallet from useStacks
+    connectWallet
   } = useStacks();
   
   const router = useRouter();
@@ -79,6 +79,60 @@ export default function CreateContractPage() {
     const oneYear = 365 * oneDay;
     
     return timestamp > now + oneDay && timestamp < now + oneYear;
+  };
+
+  // Add this test function to your create contract page:
+  const testLatestContractId = async () => {
+    console.log('🔍 Testing contract IDs 1-20...');
+    
+    for (let id = 1; id <= 20; id++) {
+      try {
+        const result = await fetchCallReadOnlyFunction({
+          network: STACKS_TESTNET,
+          contractAddress: 'ST3A5HQKQM3T3BV1MCZ45S6Q729V8355BQ0W0NP2V',
+          contractName: 'workshield-escrow',
+          functionName: 'get-contract',
+          functionArgs: [uintCV(id)],
+          senderAddress: 'ST3A5HQKQM3T3BV1MCZ45S6Q729V8355BQ0W0NP2V',
+        });
+        
+        const contractData = cvToJSON(result);
+        if (contractData.value && contractData.value.value) {
+          console.log(`✅ Contract ${id} exists:`, contractData.value.value.description?.value);
+        } else {
+          console.log(`❌ Contract ${id} does not exist`);
+        }
+      } catch (error) {
+        console.log(`❌ Contract ${id} error:`, error);
+      }
+    }
+  };
+
+
+
+  const testContractReading = async () => {
+    console.log('🧪 Testing contract reading...');
+    
+    try {
+      const [contractAddress, contractName] = 'ST3A5HQKQM3T3BV1MCZ45S6Q729V8355BQ0W0NP2V.workshield-escrow'.split('.');
+      
+      // Try to read contract #1
+      const result = await fetchCallReadOnlyFunction({
+        network: STACKS_TESTNET,
+        contractAddress,
+        contractName, 
+        functionName: 'get-contract',
+        functionArgs: [uintCV(1)],
+        senderAddress: 'ST3A5HQKQM3T3BV1MCZ45S6Q729V8355BQ0W0NP2V',
+      });
+      
+      console.log('📋 Raw contract read result:', result);
+      const contractData = cvToJSON(result);
+      console.log('📋 Parsed contract data:', contractData);
+      
+    } catch (error) {
+      console.error('❌ Contract reading failed:', error);
+    }
   };
 
   // Enhanced wallet connection test
@@ -174,7 +228,7 @@ export default function CreateContractPage() {
     }
   };
 
-  // Test contract creation directly (for debugging)
+  // Test contract creation directly (for debugging) - ORIGINAL VERSION
   const testDirectContractCall = async () => {
     console.log('🧪 Testing direct contract call...');
     
@@ -224,6 +278,103 @@ export default function CreateContractPage() {
     } catch (error) {
       console.error('❌ Direct contract call error:', error);
       alert(`❌ Direct contract call failed:\n${error}`);
+    }
+  };
+
+  // NEW: Simple contract call test (no post conditions)
+  const testContractCallSimple = async () => {
+    console.log('🧪 Testing contract call (SIMPLE VERSION - No Post Conditions)...');
+    
+    if (!isSignedIn || !userData) {
+      alert('❌ Please connect wallet first');
+      return;
+    }
+    
+    try {
+      const userAddress = userData?.profile?.stxAddress?.testnet || userData?.profile?.stxAddress?.mainnet;
+      console.log('🚀 Testing SIMPLE contract call with user:', userAddress);
+      
+      const { openContractCall } = await import('@stacks/connect');
+      const { stringUtf8CV, uintCV, standardPrincipalCV } = await import('@stacks/transactions');
+      
+      // SIMPLE VERSION - No post conditions
+      const testOptions = {
+        contractAddress: 'ST3A5HQKQM3T3BV1MCZ45S6Q729V8355BQ0W0NP2V',
+        contractName: 'workshield-escrow',
+        functionName: 'create-escrow',
+        functionArgs: [
+          standardPrincipalCV(userAddress),
+          standardPrincipalCV('ST2C36S11ETAE5TAE1Z1F1Q2SYTMF1FW7VQZEJNGZ'),
+          stringUtf8CV('Test simple contract call'),
+          uintCV(Math.floor(Date.now() / 1000) + 86400),
+          uintCV(10000000)
+        ],
+        network,
+        appDetails: {
+          name: 'WorkShield',
+          icon: window.location.origin + '/favicon.ico',
+        },
+        // NO POST CONDITIONS - let wallet handle it
+        onFinish: (data: any) => {
+          console.log('✅ SIMPLE contract call successful:', data);
+          alert('🎉 SUCCESS! Wallet approved the transaction!\n\nTransaction: ' + (data.txId || data.txid));
+        },
+        onCancel: () => {
+          console.log('❌ SIMPLE contract call cancelled');
+          alert('❌ Transaction cancelled by user');
+        }
+      };
+      
+      console.log('🚀 Calling SIMPLE openContractCall:', testOptions);
+      
+      await openContractCall(testOptions);
+      console.log('✅ SIMPLE openContractCall called - waiting for wallet popup...');
+      
+    } catch (error) {
+      console.error('❌ SIMPLE contract call error:', error);
+      alert(`❌ SIMPLE contract call failed: ${error}`);
+    }
+  };
+
+  // Test STX transfer (simpler than contract call)
+  const testSTXTransfer = async () => {
+    console.log('🧪 Testing STX transfer (simpler than contract call)...');
+    
+    if (!isSignedIn || !userData) {
+      alert('❌ Please connect wallet first');
+      return;
+    }
+    
+    try {
+      const { openSTXTransfer } = await import('@stacks/connect');
+      
+      const transferOptions = {
+        recipient: 'ST2C36S11ETAE5TAE1Z1F1Q2SYTMF1FW7VQZEJNGZ',
+        amount: '1000', // 0.001 STX for testing
+        memo: 'WorkShield wallet test',
+        network,
+        appDetails: {
+          name: 'WorkShield',
+          icon: window.location.origin + '/favicon.ico',
+        },
+        onFinish: (data: any) => {
+          console.log('✅ STX transfer successful:', data);
+          alert('✅ STX transfer test successful! Wallet popup works.');
+        },
+        onCancel: () => {
+          console.log('❌ STX transfer cancelled');
+          alert('❌ STX transfer cancelled by user');
+        }
+      };
+      
+      console.log('🚀 Testing STX transfer with options:', transferOptions);
+      
+      await openSTXTransfer(transferOptions);
+      console.log('✅ openSTXTransfer called - waiting for wallet popup...');
+      
+    } catch (error) {
+      console.error('❌ STX transfer test error:', error);
+      alert(`❌ STX transfer test failed:\n${error}`);
     }
   };
 
@@ -356,6 +507,15 @@ export default function CreateContractPage() {
         console.log('✅ Contract created successfully:', result);
         alert(`✅ Contract created successfully!${result.txId ? ` Transaction ID: ${result.txId}` : ''}`);
         
+        // Reset form
+        setFormData({
+          freelancer: '',
+          description: '',
+          totalAmount: '',
+          endDate: ''
+        });
+        
+        // Navigate to contracts list
         setTimeout(() => {
           router.push('/dashboard');
         }, 2000);
@@ -441,9 +601,20 @@ export default function CreateContractPage() {
                 <div>• Signed In: {isSignedIn ? '✅ Yes' : '❌ No'}</div>
                 <div>• User Address: {userData?.profile?.stxAddress?.testnet?.slice(0, 15) || 'None'}...</div>
                 <div>• Transaction In Progress: {transactionInProgress ? '⏳ Yes' : '✅ No'}</div>
+                <div>• Network: {network.chainId === 2147483648 ? '🧪 Testnet' : '🌐 Mainnet'}</div>
               </div>
 
+              {/* Basic Tests */}
               <div className="grid grid-cols-2 gap-2 mb-3">
+                <button 
+                  onClick={testLatestContractId}
+                  className="bg-blue-500 text-white px-4 py-2 rounded"
+                >
+                  🔍 Test Contract IDs
+                </button>
+                <button onClick={testContractReading} className="bg-blue-500 text-white px-4 py-2 rounded">
+                  🧪 Test Contract Reading
+                </button>
                 <button 
                   type="button"
                   onClick={testWalletConnection}
@@ -467,12 +638,35 @@ export default function CreateContractPage() {
                 </button>
                 <button 
                   type="button"
-                  onClick={testDirectContractCall}
+                  onClick={testSTXTransfer}
                   disabled={!isSignedIn}
                   className="px-3 py-2 bg-orange-500 text-white text-xs rounded hover:bg-orange-600 transition-colors disabled:bg-gray-400"
                 >
-                  🎯 Test Contract Call
+                  💰 Test STX Transfer
                 </button>
+              </div>
+
+              {/* Contract Call Tests */}
+              <div className="mb-3">
+                <div className="text-xs font-medium text-gray-700 mb-2">Contract Call Tests:</div>
+                <div className="grid grid-cols-1 gap-2">
+                  <button 
+                    type="button"
+                    onClick={testDirectContractCall}
+                    disabled={!isSignedIn}
+                    className="px-3 py-2 bg-red-500 text-white text-xs rounded hover:bg-red-600 transition-colors disabled:bg-gray-400"
+                  >
+                    🎯 Test Contract Call (Original)
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={testContractCallSimple}
+                    disabled={!isSignedIn}
+                    className="px-3 py-2 bg-green-600 text-white text-xs rounded hover:bg-green-700 transition-colors disabled:bg-gray-400"
+                  >
+                    🚀 Test Contract Call (Simple - No Post Conditions)
+                  </button>
+                </div>
               </div>
 
               {/* Manual Wallet Connect Button */}
@@ -488,16 +682,15 @@ export default function CreateContractPage() {
                 </div>
               )}
 
-              {/* Troubleshooting Tips */}
+              {/* Strategy Instructions */}
               <div className="text-xs text-gray-600 mt-3 p-2 bg-yellow-50 border border-yellow-200 rounded">
-                <strong>Troubleshooting Tips:</strong>
-                <ul className="list-disc list-inside mt-1 space-y-1">
-                  <li>Install Leather Wallet or Xverse extension</li>
-                  <li>Disable popup blockers for this site</li>
-                  <li>Try in incognito mode</li>
-                  <li>Refresh page after installing wallet</li>
-                  <li>Check browser console for detailed errors</li>
-                </ul>
+                <strong>🎯 Testing Strategy:</strong>
+                <ol className="list-decimal list-inside mt-1 space-y-1">
+                  <li>First try STX Transfer (should open wallet popup)</li>
+                  <li>Then try Simple Contract Call (no post conditions)</li>
+                  <li>If Simple works, we know the issue is post conditions</li>
+                  <li>Check browser console for specific errors</li>
+                </ol>
               </div>
             </div>
           )}
@@ -602,7 +795,7 @@ export default function CreateContractPage() {
                   <>
                     <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 714 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
                     {transactionInProgress ? 'Confirm in Wallet...' : 'Creating Contract...'}
                   </>
