@@ -20,7 +20,6 @@ import {
   formatSTX,
   formatDate,
   getContractStatusInfo,
-  calculateContractProgress,
   UserRole
 } from '@/types';
 
@@ -31,45 +30,59 @@ export default function ContractListPage() {
   const [loadingContracts, setLoadingContracts] = useState(true);
   const [userRole, setUserRole] = useState<UserRole | null>(null);
 
+  // ✅ FIXED: Define progress calculation function locally to avoid import conflicts
+  const calculateProgress = (milestones: any[]) => {
+    if (!milestones || milestones.length === 0) {
+      return { total: 0, completed: 0, percentage: 0 };
+    }
+    
+    const total = milestones.length;
+    const completed = milestones.filter(m => m.status === MilestoneStatus.APPROVED).length;
+    const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
+    
+    return { total, completed, percentage };
+  };
+
   useEffect(() => {
     if (isSignedIn && userData) {
-        const loadContracts = async () => {
-              const userAddress = userData.profile.stxAddress?.testnet || userData.profile.stxAddress?.mainnet;
-                console.log('👤 Your current wallet address:', userAddress);
-                console.log('🏠 Contract client address: STDCC1840NWS58QP44QMKC2BRX06VTRCZ7TGK95P');
-                console.log('👷 Contract freelancer address: ST3A5HQKQM3T3BV1MCZ45S6Q729V8355BQ0W0NP2V');
-                console.log('🔍 Do addresses match?', 
-                    userAddress === 'STDCC1840NWS58QP44QMKC2BRX06VTRCZ7TGK95P' || 
-                    userAddress === 'ST3A5HQKQM3T3BV1MCZ45S6Q729V8355BQ0W0NP2V'
-                );
+      const loadContracts = async () => {
+        const userAddress = userData.profile.stxAddress?.testnet || userData.profile.stxAddress?.mainnet;
+        console.log('👤 Your current wallet address:', userAddress);
+        console.log('🏠 Contract client address: STDCC1840NWS58QP44QMKC2BRX06VTRCZ7TGK95P');
+        console.log('👷 Contract freelancer address: ST3A5HQKQM3T3BV1MCZ45S6Q729V8355BQ0W0NP2V');
+        console.log('🔍 Do addresses match?', 
+          userAddress === 'STDCC1840NWS58QP44QMKC2BRX06VTRCZ7TGK95P' || 
+          userAddress === 'ST3A5HQKQM3T3BV1MCZ45S6Q729V8355BQ0W0NP2V'
+        );
+      
+        if (userAddress) {
+          setLoadingContracts(true);
+          try {
+            console.log('🔍 Fetching contracts for user:', userAddress);
+            const fetchedContracts = await fetchUserContracts(userAddress);
+            console.log('📦 Fetched contracts from blockchain:', fetchedContracts);
+            console.log('📊 Number of contracts found:', fetchedContracts.length);
+            setContracts(fetchedContracts);
             
-            if (userAddress) {
-                setLoadingContracts(true);
-                try {
-                console.log('🔍 Fetching contracts for user:', userAddress);
-                const fetchedContracts = await fetchUserContracts(userAddress);
-                console.log('📦 Fetched contracts from blockchain:', fetchedContracts);
-                console.log('📊 Number of contracts found:', fetchedContracts.length);
-                setContracts(fetchedContracts);
-                
-                // Determine primary role
-                const isClientInAnyContract = fetchedContracts.some(contract => contract.client === userAddress);
-                const isFreelancerInAnyContract = fetchedContracts.some(contract => contract.freelancer === userAddress);
-                
-                if (isClientInAnyContract && !isFreelancerInAnyContract) {
-                    setUserRole(UserRole.CLIENT);
-                } else if (isFreelancerInAnyContract && !isClientInAnyContract) {
-                    setUserRole(UserRole.FREELANCER);
-                } else if (isClientInAnyContract && isFreelancerInAnyContract) {
-                    setUserRole(UserRole.CLIENT);
-                }
-                } catch (error) {
-                console.error('Error loading contracts:', error);
-                } finally {
-                setLoadingContracts(false);
-                }
+            // Determine primary role
+            const isClientInAnyContract = fetchedContracts.some(contract => contract.client === userAddress);
+            const isFreelancerInAnyContract = fetchedContracts.some(contract => contract.freelancer === userAddress);
+            
+            if (isClientInAnyContract && !isFreelancerInAnyContract) {
+              setUserRole(UserRole.CLIENT);
+            } else if (isFreelancerInAnyContract && !isClientInAnyContract) {
+              setUserRole(UserRole.FREELANCER);
+            } else if (isClientInAnyContract && isFreelancerInAnyContract) {
+              setUserRole(UserRole.CLIENT); // Default to client if both
             }
-        };
+            
+          } catch (error) {
+            console.error('Error loading contracts:', error);
+          } finally {
+            setLoadingContracts(false);
+          }
+        }
+      };
 
       loadContracts();
     }
@@ -77,21 +90,18 @@ export default function ContractListPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-orange-50 to-amber-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading...</p>
-        </div>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-orange-600"></div>
       </div>
     );
   }
 
   if (!isSignedIn) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-orange-50 to-amber-50 flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Connect Your Wallet</h1>
-          <p className="text-gray-600 mb-6">Please connect your wallet to view your contracts</p>
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">Connect Your Wallet</h2>
+          <p className="text-gray-600 mb-8">Please connect your Stacks wallet to view your contracts</p>
           <button
             onClick={connectWallet}
             className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-lg font-semibold transition-colors"
@@ -106,7 +116,6 @@ export default function ContractListPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-orange-50 to-amber-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -114,28 +123,30 @@ export default function ContractListPage() {
           transition={{ duration: 0.6 }}
           className="mb-8"
         >
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">
-                {userRole === 'client' ? 'My Contracts' : 'Assigned Contracts'}
-              </h1>
-              <p className="text-gray-600 mt-2">
-                {userRole === 'client' 
-                  ? 'Manage your projects and track milestone progress'
-                  : 'View your assignments and submit work'
-                }
-              </p>
+          <div className="bg-white rounded-lg shadow-sm p-6 border border-gray-100">
+            <div className="flex justify-between items-center">
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900">
+                  {userRole === UserRole.CLIENT ? 'My Contracts' : 'Assigned Contracts'}
+                </h1>
+                <p className="text-gray-600 mt-2">
+                  {userRole === UserRole.CLIENT 
+                    ? 'Manage your projects and track milestone progress'
+                    : 'View your assignments and submit work'
+                  }
+                </p>
+              </div>
+              
+              {userRole === UserRole.CLIENT && (
+                <button
+                  onClick={() => router.push('/dashboard/create')}
+                  className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-lg font-semibold transition-colors flex items-center gap-2"
+                >
+                  <Plus className="h-5 w-5" />
+                  Create New Contract
+                </button>
+              )}
             </div>
-            
-            {userRole === 'client' && (
-              <button
-                onClick={() => router.push('/dashboard/create')}
-                className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-lg font-semibold transition-colors flex items-center gap-2"
-              >
-                <Plus className="h-5 w-5" />
-                Create New Contract
-              </button>
-            )}
           </div>
         </motion.div>
 
@@ -159,12 +170,12 @@ export default function ContractListPage() {
             </div>
             <h3 className="text-xl font-semibold text-gray-900 mb-2">No contracts found</h3>
             <p className="text-gray-600 mb-6">
-              {userRole === 'client' 
+              {userRole === UserRole.CLIENT 
                 ? "You haven't created any contracts yet. Start by creating your first project."
                 : "You don't have any assigned contracts yet."
               }
             </p>
-            {userRole === 'client' && (
+            {userRole === UserRole.CLIENT && (
               <button
                 onClick={() => router.push('/dashboard/create')}
                 className="bg-orange-500 hover:bg-orange-600 text-white px-6 py-3 rounded-lg font-semibold transition-colors"
@@ -177,7 +188,8 @@ export default function ContractListPage() {
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {contracts.map((contract, index) => {
               const statusInfo = getContractStatusInfo(contract.status);
-              const progress = calculateContractProgress(contract.milestones);
+              // ✅ FIXED: Use local progress calculation function
+              const progress = calculateProgress(contract.milestones);
               
               return (
                 <motion.div
@@ -218,7 +230,7 @@ export default function ContractListPage() {
                     <div className="flex items-center gap-2 text-sm text-gray-600">
                       <User className="h-4 w-4 text-gray-400" />
                       <span>
-                        {userRole === 'client' 
+                        {userRole === UserRole.CLIENT 
                           ? `Freelancer: ${contract.freelancer.slice(0, 8)}...`
                           : `Client: ${contract.client.slice(0, 8)}...`
                         }
@@ -226,7 +238,7 @@ export default function ContractListPage() {
                     </div>
                   </div>
 
-                  {/* Progress Bar */}
+                  {/* Progress Bar - ✅ FIXED: Now properly accessing object properties */}
                   <div className="mb-4">
                     <div className="flex justify-between text-sm text-gray-600 mb-2">
                       <span>Progress</span>

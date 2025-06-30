@@ -1,135 +1,179 @@
-/**
- * Utility functions for address validation and formatting
- */
-
-/**
- * Validates a Stacks address
- * Stacks addresses are 41 characters long and start with 'ST' (mainnet) or 'SP' (testnet)
- */
-export function isValidStacksAddress(address: string): boolean {
-  if (!address || typeof address !== 'string') {
-    return false;
-  }
-
-  // Remove any whitespace
-  const cleanAddress = address.trim();
-
-  // Check length (should be 41 characters)
-  if (cleanAddress.length !== 41) {
-    return false;
-  }
-
-  // Check if it starts with ST (mainnet) or SP (testnet)
-  if (!cleanAddress.startsWith('ST') && !cleanAddress.startsWith('SP')) {
-    return false;
-  }
-
-  // Check if the rest contains only valid characters (alphanumeric, case-insensitive)
-  const addressPattern = /^S[TP][A-Z0-9]{39}$/i;
-  return addressPattern.test(cleanAddress);
+// /frontend/src/lib/utils.ts - Complete utility functions without external dependencies
+// Simple className utility (replaces clsx + tailwind-merge)
+export function cn(...classes: (string | undefined | null | boolean)[]): string {
+  return classes
+    .filter(Boolean)
+    .join(' ')
+    .split(' ')
+    .filter((c, i, arr) => arr.indexOf(c) === i) // Remove duplicates
+    .join(' ');
 }
 
-/**
- * Formats a Stacks address for display (truncated)
- */
+// ✅ ADDED: Address formatting function (was missing)
 export function formatAddress(address: string, startChars: number = 6, endChars: number = 4): string {
-  if (!address || !isValidStacksAddress(address)) {
-    return '';
-  }
-
-  if (address.length <= startChars + endChars) {
+  if (!address || address.length <= startChars + endChars) {
     return address;
   }
-
   return `${address.slice(0, startChars)}...${address.slice(-endChars)}`;
 }
 
-/**
- * Gets the network type from a Stacks address
- */
-export function getAddressNetwork(address: string): 'mainnet' | 'testnet' | null {
-  if (!isValidStacksAddress(address)) {
-    return null;
+// Blockchain utilities
+export function formatBlockHeight(height: number): string {
+  return height.toLocaleString();
+}
+
+export function formatTimestamp(timestamp: number): string {
+  return new Date(timestamp * 1000).toLocaleString();
+}
+
+// Error handling utilities
+export function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
   }
-
-  if (address.startsWith('ST')) {
-    return 'mainnet';
-  } else if (address.startsWith('SP')) {
-    return 'testnet';
+  if (typeof error === 'string') {
+    return error;
   }
-
-  return null;
+  return 'An unknown error occurred';
 }
 
-/**
- * Validates if an address matches the current network
- */
-export function isAddressForNetwork(address: string, network: 'mainnet' | 'testnet'): boolean {
-  const addressNetwork = getAddressNetwork(address);
-  return addressNetwork === network;
+// Validation utilities
+export function isValidUrl(url: string): boolean {
+  try {
+    new URL(url);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
-/**
- * Converts STX amount from microSTX to STX
- */
-export function microStxToStx(microStx: number | string): number {
-  const amount = typeof microStx === 'string' ? parseFloat(microStx) : microStx;
-  return amount / 1000000;
+export function truncateText(text: string, maxLength: number): string {
+  if (text.length <= maxLength) return text;
+  return text.slice(0, maxLength) + '...';
 }
 
-/**
- * Converts STX amount to microSTX
- */
-export function stxToMicroStx(stx: number | string): number {
-  const amount = typeof stx === 'string' ? parseFloat(stx) : stx;
-  return Math.floor(amount * 1000000);
+// Local storage utilities (with error handling)
+export function safeLocalStorage() {
+  const isClient = typeof window !== 'undefined';
+  
+  return {
+    getItem: (key: string): string | null => {
+      if (!isClient) return null;
+      try {
+        return localStorage.getItem(key);
+      } catch {
+        return null;
+      }
+    },
+    setItem: (key: string, value: string): void => {
+      if (!isClient) return;
+      try {
+        localStorage.setItem(key, value);
+      } catch {
+        // Silently fail
+      }
+    },
+    removeItem: (key: string): void => {
+      if (!isClient) return;
+      try {
+        localStorage.removeItem(key);
+      } catch {
+        // Silently fail
+      }
+    }
+  };
 }
 
-/**
- * Formats STX amount for display
- */
-export function formatStxAmount(microStx: number | string): string {
-  const stx = microStxToStx(microStx);
-  return `${stx.toLocaleString()} STX`;
+// Contract helper utilities
+export function parseContractIdentifier(contractId: string): { address: string; name: string } {
+  const [address, name] = contractId.split('.');
+  return { address, name };
 }
 
-/**
- * Validates STX amount
- */
-export function isValidStxAmount(amount: string | number): boolean {
-  const num = typeof amount === 'string' ? parseFloat(amount) : amount;
-  return !isNaN(num) && num > 0 && num <= 1000000; // Max 1M STX
+export function buildContractIdentifier(address: string, name: string): string {
+  return `${address}.${name}`;
 }
 
-/**
- * Validates a deadline timestamp
- */
-export function isValidDeadline(deadline: number): boolean {
-  const now = Date.now();
-  const oneDay = 24 * 60 * 60 * 1000; // 1 day in milliseconds
-  const oneYear = 365 * oneDay; // 1 year in milliseconds
-
-  return deadline > now + oneDay && deadline < now + oneYear;
+// Debounce utility for search/input
+export function debounce<T extends (...args: any[]) => any>(
+  func: T,
+  wait: number
+): (...args: Parameters<T>) => void {
+  let timeout: NodeJS.Timeout;
+  return (...args: Parameters<T>) => {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func(...args), wait);
+  };
 }
 
-/**
- * Formats a timestamp to a readable date
- */
-export function formatDate(timestamp: number): string {
-  return new Date(timestamp).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  });
+// Retry utility for network requests
+export async function retry<T>(
+  fn: () => Promise<T>,
+  retries: number = 3,
+  delay: number = 1000
+): Promise<T> {
+  try {
+    return await fn();
+  } catch (error) {
+    if (retries > 0) {
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return retry(fn, retries - 1, delay * 2); // Exponential backoff
+    }
+    throw error;
+  }
 }
 
-/**
- * Calculates days remaining until deadline
- */
-export function getDaysUntilDeadline(deadline: number): number {
-  const now = Date.now();
-  const timeDiff = deadline - now;
-  return Math.ceil(timeDiff / (24 * 60 * 60 * 1000));
+// Copy to clipboard utility
+export async function copyToClipboard(text: string): Promise<boolean> {
+  if (!navigator?.clipboard) {
+    return false;
+  }
+  
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Format file size
+export function formatFileSize(bytes: number): string {
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  if (bytes === 0) return '0 Bytes';
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
+}
+
+// Generate random ID
+export function generateId(): string {
+  return Math.random().toString(36).substring(2) + Date.now().toString(36);
+}
+
+// Sleep utility
+export function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Object utilities
+export function isEmpty(obj: any): boolean {
+  if (obj === null || obj === undefined) return true;
+  if (Array.isArray(obj)) return obj.length === 0;
+  if (typeof obj === 'object') return Object.keys(obj).length === 0;
+  if (typeof obj === 'string') return obj.trim().length === 0;
+  return false;
+}
+
+export function deepClone<T>(obj: T): T {
+  if (obj === null || typeof obj !== 'object') return obj;
+  if (obj instanceof Date) return new Date(obj.getTime()) as unknown as T;
+  if (Array.isArray(obj)) return obj.map(item => deepClone(item)) as unknown as T;
+  
+  const cloned = {} as T;
+  for (const key in obj) {
+    if (obj.hasOwnProperty(key)) {
+      cloned[key] = deepClone(obj[key]);
+    }
+  }
+  return cloned;
 }

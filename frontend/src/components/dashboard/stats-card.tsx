@@ -45,7 +45,7 @@ export default function StatsCards({ stats, role }: StatsCardsProps) {
     },
     {
       name: 'Open Disputes',
-      value: stats.openDisputes,
+      value: stats.openDisputes || 0, // ✅ FIXED: Handle undefined
       icon: (
         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.966-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
@@ -78,7 +78,7 @@ export default function StatsCards({ stats, role }: StatsCardsProps) {
     },
     {
       name: 'Total Earnings',
-      value: formatSTX(stats.totalEarnings),
+      value: formatSTX(stats.totalEarnings || stats.totalEarned), // ✅ FIXED: Handle both property names and undefined
       icon: (
         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
