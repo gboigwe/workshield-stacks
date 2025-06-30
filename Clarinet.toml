@@ -10,7 +10,7 @@ path = 'contracts/workshield-dispute.clar'
 clarity_version = 3
 epoch = 3.1
 
-[contracts.workshield-escrow]
+[contracts.workshield-escrow-v2]
 path = 'contracts/workshield-escrow.clar'
 clarity_version = 3
 epoch = 3.1
