@@ -2,31 +2,17 @@
 id: 0
 name: Testnet deployment
 network: testnet
-stacks-node: "https://stacks-node-api.testnet.stacks.co"
+stacks-node: "https://api.testnet.hiro.so"
 bitcoin-node: "http://blockstack:blockstacksystem@bitcoind.testnet.stacks.co:18332"
 plan:
   batches:
     - id: 0
       transactions:
         - contract-publish:
-            contract-name: workshield-dispute
-            expected-sender: ST1722J1SB8R32FN9XQZTT7WPA0ZG0CK7BHTM40S6
-            cost: 6409
-            path: contracts/workshield-dispute.clar
-            anchor-block-only: true
-            clarity-version: 3
-        - contract-publish:
-            contract-name: workshield-escrow
-            expected-sender: ST1722J1SB8R32FN9XQZTT7WPA0ZG0CK7BHTM40S6
-            cost: 9778
+            contract-name: workshield-escrow-v2
+            expected-sender: ST3A5HQKQM3T3BV1MCZ45S6Q729V8355BQ0W0NP2V
+            cost: 100000
             path: contracts/workshield-escrow.clar
-            anchor-block-only: true
-            clarity-version: 3
-        - contract-publish:
-            contract-name: workshield-payments
-            expected-sender: ST1722J1SB8R32FN9XQZTT7WPA0ZG0CK7BHTM40S6
-            cost: 6823
-            path: contracts/workshield-payments.clar
             anchor-block-only: true
             clarity-version: 3
       epoch: "3.1"

@@ -323,3 +323,13 @@
 (define-read-only (is-authorized (contract-id uint) (user principal))
   (or (is-client contract-id user) (is-freelancer contract-id user))
 )
+
+;; Get the next contract ID (tells us total contracts)
+(define-read-only (get-next-contract-id)
+  (var-get next-contract-id)
+)
+
+;; Get total contracts created so far
+(define-read-only (get-total-contracts)
+  (- (var-get next-contract-id) u1)
+)
