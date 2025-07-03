@@ -42,7 +42,10 @@ export default function ContractDetailsPage() {
     submitMilestone, 
     approveMilestone,
     rejectMilestone,
-    transactionInProgress 
+    transactionInProgress,
+    // isPollingEnabled,
+    // enableRealTimeUpdates,
+    // disableRealTimeUpdates
   } = useStacks();
   
   const [contract, setContract] = useState<Contract | null>(null);
@@ -104,6 +107,16 @@ export default function ContractDetailsPage() {
 
     loadContract();
   }, [contractId, isSignedIn, userAddress, fetchContractById]);
+
+  // useEffect(() => {
+  //   // Enable real-time updates when viewing contract details
+  //   enableRealTimeUpdates();
+    
+  //   return () => {
+  //     // Disable when leaving the page
+  //     disableRealTimeUpdates();
+  //   };
+  // }, [enableRealTimeUpdates, disableRealTimeUpdates]);
 
   // Refresh contract data
   const refreshContract = async () => {
@@ -357,6 +370,13 @@ export default function ContractDetailsPage() {
                   </div>
                 </div>
               </div>
+
+              {/* {isPollingEnabled && (
+                <div className="fixed bottom-4 right-4 bg-green-100 border border-green-400 text-green-700 px-3 py-1 rounded-lg text-sm">
+                  🔄 Live updates enabled
+                </div>
+              )}
+              */}
               
               <div>
                 <h4 className="font-medium text-gray-900 mb-1">Timeline</h4>

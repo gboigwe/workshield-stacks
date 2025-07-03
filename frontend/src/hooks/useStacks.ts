@@ -18,17 +18,98 @@ import {
 import { STACKS_TESTNET, STACKS_MAINNET } from '@stacks/network';
 import { Contract, Milestone, MilestoneStatus, TransactionResponse } from '@/types';
 
+// // Rate limiting protection
+// const API_CALL_DELAY = 1000; // 1 second between API calls
+// let lastApiCall = 0;
+
+// const delayApiCall = async () => {
+//   const now = Date.now();
+//   const timeSinceLastCall = now - lastApiCall;
+//   if (timeSinceLastCall < API_CALL_DELAY) {
+//     await new Promise(resolve => setTimeout(resolve, API_CALL_DELAY - timeSinceLastCall));
+//   }
+//   lastApiCall = Date.now();
+// };
+
 // Initialize App Config and Session
 const appConfig = new AppConfig(['store_write', 'publish_data']);
 const userSession = new UserSession({ appConfig });
 
-// Network configuration
+// Network configuration with Hiro API key
 const getNetwork = () => {
   const networkType = process.env.NEXT_PUBLIC_NETWORK || 'testnet';
-  return networkType === 'mainnet' ? STACKS_MAINNET : STACKS_TESTNET;
+  const apiKey = process.env.NEXT_PUBLIC_HIRO_API_KEY;
+  
+  console.log(`🌐 Network: ${networkType}, API Key: ${apiKey ? 'Set ✅' : 'Missing ❌'}`);
+  
+  // Get the base network configuration
+  const baseNetwork = networkType === 'mainnet' ? STACKS_MAINNET : STACKS_TESTNET;
+  
+  // If no API key, return the base network
+  if (!apiKey) {
+    console.log('⚠️ No API key found - using default network configuration');
+    return baseNetwork;
+  }
+  
+  // Create enhanced network configuration with API key
+  const enhancedNetwork = {
+    ...baseNetwork,
+    // Add custom fetch function that includes the API key
+    fetchFn: async (url: string, init?: RequestInit) => {
+      const headers = {
+        ...init?.headers,
+        'X-API-Key': apiKey,
+        'Content-Type': 'application/json',
+      };
+      
+      console.log(`📡 Making API call to: ${url.split('?')[0]} with API key`);
+      
+      return fetch(url, {
+        ...init,
+        headers,
+      });
+    }
+  };
+  
+  return enhancedNetwork;
 };
 
 const network = getNetwork();
+
+// Enhanced API call function with rate limiting and API key support
+const makeApiCall = async (apiCall: () => Promise<any>, retries = 3): Promise<any> => {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      // Add delay between calls to avoid rate limiting
+      if (attempt > 1) {
+        const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+        console.log(`⏳ Waiting ${delay}ms before retry ${attempt}/${retries}`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+      
+      const result = await apiCall();
+      
+      if (attempt > 1) {
+        console.log(`✅ API call succeeded on attempt ${attempt}/${retries}`);
+      }
+      
+      return result;
+    } catch (error: any) {
+      console.log(`❌ API call attempt ${attempt}/${retries} failed:`, error?.message || error);
+      
+      // If this was the last retry, throw the error
+      if (attempt === retries) {
+        throw error;
+      }
+      
+      // Check if it's a rate limit error
+      if (error?.message?.includes('429') || error?.message?.includes('rate limit')) {
+        console.log('🚦 Rate limit detected, waiting longer...');
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+    }
+  }
+};
 
 // Contract Configuration - UPDATED WITH NEW CONTRACT ADDRESS
 const CONTRACTS = {
@@ -51,9 +132,6 @@ const appDetails = {
   icon: typeof window !== 'undefined' ? window.location.origin + '/favicon.ico' : '',
 };
 
-// Rate limiting and caching
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
 interface ContractCache {
   [key: string]: {
     data: any;
@@ -61,13 +139,23 @@ interface ContractCache {
   };
 }
 
+// ✅ Enhanced caching with longer cache times
+const CACHE_DURATION = 30000; // 30 seconds cache
+const isDataFresh = (timestamp: number): boolean => {
+  return Date.now() - timestamp < CACHE_DURATION;
+};
+// Rate limiting and caching
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+
+
 const contractCache: ContractCache = {};
-const CACHE_TTL = 30000; // 30 seconds
+// const CACHE_TTL = 30000; // 30 seconds
 
 // Helper functions
-const isDataFresh = (timestamp: number): boolean => {
-  return Date.now() - timestamp < CACHE_TTL;
-};
+// const isDataFresh = (timestamp: number): boolean => {
+//   return Date.now() - timestamp < CACHE_TTL;
+// };
 
 interface UseStacksReturn {
   userData: any;
@@ -106,6 +194,10 @@ interface UseStacksReturn {
   
   // Debug function
   debugContractSystem: () => Promise<void>;
+
+  isPollingEnabled: boolean;
+  enableRealTimeUpdates: () => void;
+  disableRealTimeUpdates: () => void;
 }
 
 export const useStacks = (): UseStacksReturn => {
@@ -115,6 +207,7 @@ export const useStacks = (): UseStacksReturn => {
   const [transactionInProgress, setTransactionInProgress] = useState(false);
   const [clientContracts, setClientContracts] = useState<Contract[]>([]);
   const [freelancerContracts, setFreelancerContracts] = useState<Contract[]>([]);
+  const [isPollingEnabled, setIsPollingEnabled] = useState(false);
 
   // Initialize authentication
   useEffect(() => {
@@ -260,15 +353,17 @@ export const useStacks = (): UseStacksReturn => {
   // ✅ OPTIMIZED: Fetch all milestones for a contract
   const fetchMilestonesByContract = useCallback(async (contractId: number): Promise<Milestone[]> => {
     try {
+
+      // await delayApiCall();
       // First get the milestone count
-      const countResult = await fetchCallReadOnlyFunction({
+      const countResult = await makeApiCall(() => fetchCallReadOnlyFunction({
         network,
         contractAddress: escrowContract.address,
         contractName: escrowContract.name,
         functionName: 'get-milestone-count',
         functionArgs: [uintCV(contractId)],
         senderAddress: escrowContract.address,
-      });
+      }));
 
       const milestoneCount = cvToJSON(countResult);
       const count = milestoneCount?.value ? parseInt(milestoneCount.value) : 0;
@@ -301,16 +396,18 @@ export const useStacks = (): UseStacksReturn => {
     }
 
     try {
-      console.log(`🔍 Fetching contract ID: ${contractId}`); // ADD THIS
+      console.log(`🔍 Fetching contract ID: ${contractId}`);
 
-      const result = await fetchCallReadOnlyFunction({
+      // await delayApiCall();
+
+      const result = await makeApiCall(() => fetchCallReadOnlyFunction({
         network,
         contractAddress: escrowContract.address,
         contractName: escrowContract.name,
         functionName: 'get-contract',
         functionArgs: [uintCV(contractId)],
         senderAddress: escrowContract.address,
-      });
+      }));
 
       const contractData = cvToJSON(result);
       console.log(`📊 Raw contract data for ID ${contractId}:`, contractData); // ADD THIS
@@ -462,6 +559,39 @@ export const useStacks = (): UseStacksReturn => {
     setClientContracts(clientContracts);
     setFreelancerContracts(freelancerContracts);
   }, [userAddress, fetchUserContracts]);
+
+  useEffect(() => {
+    if (!isPollingEnabled || !isSignedIn) return;
+
+    const pollForUpdates = async () => {
+      console.log('🔄 Polling for contract updates...');
+      
+      // Clear some cache to get fresh data (but not all to avoid rate limits)
+      const cacheKeys = Object.keys(contractCache);
+      const oldCacheKeys = cacheKeys.filter(key => 
+        !isDataFresh(contractCache[key].timestamp)
+      );
+      
+      oldCacheKeys.forEach(key => delete contractCache[key]);
+      
+      // Refresh contracts
+      await refreshContracts();
+    };
+
+    // Poll every 30 seconds
+    const interval = setInterval(pollForUpdates, 30000);
+
+    return () => clearInterval(interval);
+  }, [isPollingEnabled, isSignedIn, refreshContracts]);
+
+  // ✅ Enable polling when user navigates to contract details
+  const enableRealTimeUpdates = useCallback(() => {
+    setIsPollingEnabled(true);
+  }, []);
+
+  const disableRealTimeUpdates = useCallback(() => {
+    setIsPollingEnabled(false);
+  }, []);
 
   // Load contracts when user is signed in
   useEffect(() => {
@@ -670,10 +800,20 @@ export const useStacks = (): UseStacksReturn => {
           ],
           postConditions: [],
           postConditionMode: PostConditionMode.Allow,
-          onFinish: (data: any) => {
+          onFinish: async (data: any) => {
             console.log('✅ Milestone approved successfully:', data);
             setTransactionInProgress(false);
-            setTimeout(() => refreshContracts(), 2000);
+            
+            // ✅ Clear specific contract cache for immediate refresh
+            Object.keys(contractCache).forEach(key => {
+              if (key.startsWith('contract-') || key.includes('user-contracts')) {
+                delete contractCache[key];
+              }
+            });
+            
+            // ✅ Immediate refresh without delay
+            await refreshContracts();
+            
             resolve({ success: true, txId: data.txId });
           },
           onCancel: () => {
@@ -780,6 +920,7 @@ export const useStacks = (): UseStacksReturn => {
     allContracts: [...clientContracts, ...freelancerContracts],
     network,
     contracts: CONTRACTS,
+    isPollingEnabled,
     connectWallet,
     disconnectWallet,
     refreshContracts,
@@ -792,5 +933,7 @@ export const useStacks = (): UseStacksReturn => {
     approveMilestone,
     rejectMilestone,
     debugContractSystem,
+    enableRealTimeUpdates,
+    disableRealTimeUpdates,
   };
 };

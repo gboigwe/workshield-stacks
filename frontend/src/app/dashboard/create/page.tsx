@@ -1,4 +1,3 @@
-// /frontend/src/app/dashboard/create/page.tsx - FIXED: Working form inputs
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -43,6 +42,16 @@ interface FormErrors {
 
 export default function CreateContractPage() {
   const router = useRouter();
+
+  console.log('🔍 DEBUG: Current State Check');
+  console.log('===============================');
+
+  // Check environment variables
+  console.log('Environment Variables:');
+  console.log('- NEXT_PUBLIC_NETWORK:', process.env.NEXT_PUBLIC_NETWORK);
+  console.log('- NEXT_PUBLIC_HIRO_API_KEY:', process.env.NEXT_PUBLIC_HIRO_API_KEY ? 'SET ✅' : 'MISSING ❌');
+  console.log('- NEXT_PUBLIC_ESCROW_CONTRACT:', process.env.NEXT_PUBLIC_ESCROW_CONTRACT);
+
   const { 
     userData, 
     isSignedIn, 
@@ -50,7 +59,8 @@ export default function CreateContractPage() {
     connectWallet, 
     createEscrow, 
     transactionInProgress, 
-    network 
+    network,
+    userAddress
   } = useStacks();
   
   const [mounted, setMounted] = useState(false);
@@ -84,6 +94,8 @@ export default function CreateContractPage() {
     return null;
   }
 
+  
+
   // Show loading state
   if (loading) {
     return (
@@ -113,6 +125,27 @@ export default function CreateContractPage() {
     );
   }
 
+  // Add this temporarily to your create contract page or dashboard
+  // to see what's actually happening
+
+  // Check user data (add this in your component where useStacks is called)
+  // const { userData, userAddress, isSignedIn } = useStacks();
+
+  console.log('User Information:');
+  console.log('- Is Signed In:', isSignedIn);
+  console.log('- User Address:', userAddress);
+  console.log('- User Data:', userData);
+
+  if (userData?.profile?.stxAddress) {
+    console.log('- Testnet Address:', userData.profile.stxAddress.testnet);
+    console.log('- Mainnet Address:', userData.profile.stxAddress.mainnet);
+  }
+
+  // Check which address is being used for contract fetching
+  console.log('Expected Behavior:');
+  console.log('- Should only fetch contracts for:', userAddress);
+  console.log('- Should NOT see other users\' data');
+
   // ✅ FIXED: Simple input change handler
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -135,11 +168,32 @@ export default function CreateContractPage() {
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
 
-    // Validate freelancer address
+    console.log('🔍 Validating form data:', formData);
+
+    // Validate freelancer address with detailed logging
     if (!formData.freelancer.trim()) {
       newErrors.freelancer = 'Freelancer address is required';
-    } else if (!isValidStacksAddress(formData.freelancer.trim())) {
-      newErrors.freelancer = 'Please enter a valid Stacks address (ST...)';
+      console.log('❌ Freelancer address is empty');
+    } else {
+      const address = formData.freelancer.trim();
+      console.log('🔍 Validating freelancer address:', address);
+      
+      // Manual validation check with logging
+      const isValid = isValidStacksAddress(address);
+      console.log('Validation result:', isValid);
+      
+      if (!isValid) {
+        newErrors.freelancer = 'Please enter a valid Stacks address (ST... or SP...)';
+        console.log('❌ Address validation failed for:', address);
+        
+        // Additional debugging
+        console.log('Address length:', address.length);
+        console.log('Starts with ST:', address.startsWith('ST'));
+        console.log('Starts with SP:', address.startsWith('SP'));
+        console.log('Pattern test:', /^S[TP][A-Z0-9]{39}$/i.test(address));
+      } else {
+        console.log('✅ Address validation passed for:', address);
+      }
     }
 
     // Validate description
@@ -166,6 +220,7 @@ export default function CreateContractPage() {
       }
     }
 
+    console.log('Validation errors:', newErrors);
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
