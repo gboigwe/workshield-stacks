@@ -10,10 +10,12 @@
   },
   "dependencies": {
     "@stacks/auth": "^7.1.0",
+    "@stacks/common": "^7.0.2",
     "@stacks/connect": "^7.10.1",
     "@stacks/network": "^7.0.2",
     "@stacks/transactions": "^7.1.0",
-    "@tanstack/react-query": "^5.80.7",
+    "@tanstack/react-query": "^5.81.5",
+    "@tanstack/react-query-devtools": "^5.81.5",
     "framer-motion": "^12.18.1",
     "lucide-react": "^0.516.0",
     "next": "15.3.3",

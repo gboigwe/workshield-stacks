@@ -63,25 +63,74 @@ export const MilestoneManager: React.FC<MilestoneManagerProps> = ({
   }) => {
     try {
       setLoading(true);
-      const deadlineTimestamp = milestoneData.deadline.getTime();
+      
+      console.log('🔧 DEBUG: Starting milestone creation...');
+      console.log('📋 Milestone data:', {
+        description: milestoneData.description,
+        amount: milestoneData.amount,
+        deadline: milestoneData.deadline
+      });
+
+      // ✅ FIXED: Calculate deadline as block height offset from current time
+      const deadlineDate = milestoneData.deadline;
+      const currentDate = new Date();
+      const daysFromNow = Math.ceil((deadlineDate.getTime() - currentDate.getTime()) / (1000 * 60 * 60 * 24));
+      
+      console.log('📅 DEBUG: Days from now:', daysFromNow);
+      
+      // ✅ STACKS BLOCK TIME: ~10 minutes per block = ~144 blocks per day
+      const BLOCKS_PER_DAY = 144;
+      const blocksOffset = Math.max(1, daysFromNow * BLOCKS_PER_DAY); // Minimum 1 block
+      
+      // ✅ Get current block height from Stacks API
+      let currentBlockHeight;
+      try {
+        const response = await fetch('https://api.hiro.so/extended/v1/status');
+        const data = await response.json();
+        currentBlockHeight = data.chain_tip?.block_height || 150000; // Fallback for testnet
+      } catch (error) {
+        console.warn('⚠️ Could not fetch current block height, using fallback');
+        currentBlockHeight = 150000; // Testnet fallback
+      }
+      
+      const deadlineBlockHeight = currentBlockHeight + blocksOffset;
       const amountInMicroStx = stxToMicroStx(milestoneData.amount);
 
+      console.log('🔧 DEBUG: Calculated values:', {
+        currentBlockHeight,
+        blocksOffset,
+        deadlineBlockHeight,
+        amountInMicroStx: `${amountInMicroStx} microSTX (${milestoneData.amount} STX)`
+      });
+
+      // ✅ Validation: Check remaining balance
+      if (amountInMicroStx > contract.remainingBalance) {
+        console.error('❌ Amount exceeds remaining balance');
+        alert(`Error: Milestone amount (${milestoneData.amount} STX) exceeds remaining contract balance (${contract.remainingBalance / 1000000} STX)`);
+        return;
+      }
+
+      console.log('🚀 DEBUG: Calling addMilestone with block height...');
       const result = await addMilestone(
         contract.id,
         milestoneData.description,
         amountInMicroStx,
-        deadlineTimestamp
+        deadlineBlockHeight  // ✅ FIXED: Now using block height instead of timestamp
       );
 
+      console.log('📊 DEBUG: Transaction result:', result);
+
       if (result.success) {
+        console.log('✅ SUCCESS: Milestone added successfully');
         setShowAddMilestone(false);
         onContractUpdate();
       } else {
+        console.error('❌ FAILED: Milestone creation failed:', result.error);
         alert(`Error adding milestone: ${result.error}`);
       }
     } catch (error) {
-      console.error('Error adding milestone:', error);
-      alert('Failed to add milestone');
+      console.error('💥 EXCEPTION: Error in handleAddMilestone:', error);
+      alert('Failed to add milestone: ' + (error as Error).message);
     } finally {
       setLoading(false);
     }

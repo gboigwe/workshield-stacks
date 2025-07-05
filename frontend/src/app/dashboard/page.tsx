@@ -19,13 +19,19 @@ import {
   Activity,
   Users
 } from 'lucide-react';
-import {
-  Contract,
-  MilestoneStatus,
-  ContractStatus,
-  formatSTX,
-  formatDate,
-  UserRole
+import { 
+  Contract, 
+  Milestone, 
+  MilestoneStatus, 
+  ContractStatus, 
+  formatSTX, 
+  formatDate, 
+  UserRole,
+  // formatAmount,
+  // getContractStatusText,
+  // getContractStatusColor,
+  // getMilestoneStatusText,
+  // getMilestoneStatusColor
 } from '@/types';
 
 interface DashboardStats {
@@ -49,7 +55,7 @@ export default function EnhancedDashboardPage() {
     freelancerContracts,
     transactionInProgress,
     refreshContracts,
-    debugContractSystem
+    debugContractSystem,
   } = useStacks();
 
   
