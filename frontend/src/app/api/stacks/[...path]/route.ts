@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function POST(request: NextRequest, { params }: { params: { path: string[] } }) {
   try {
     // Your Hiro API key
-    const apiKey = process.env.NEXT_PUBLIC_HIRO_API_KEY || '49c6e72fb90e5b04c2f53721cd1f9a59';
+    const apiKey = process.env.NEXT_PUBLIC_HIRO_API_KEY;
     
     // Build the target URL
     const path = params.path.join('/');

@@ -61,7 +61,7 @@ function convertBlockHeightToTimestamp(blockHeight: number): number {
 // ✅ FIXED: Proper Stacks.js v7 Network Configuration with API Key
 const getNetwork = () => {
   const networkType = process.env.NEXT_PUBLIC_NETWORK || 'testnet';
-  const apiKey = process.env.NEXT_PUBLIC_HIRO_API_KEY || '49c6e72fb90e5b04c2f53721cd1f9a59';
+  const apiKey = process.env.NEXT_PUBLIC_HIRO_API_KEY;
   
   
   // Get base network using new v7 static objects
