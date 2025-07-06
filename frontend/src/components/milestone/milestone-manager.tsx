@@ -52,39 +52,26 @@ export default function MilestoneManager({
       const deadlineTimestamp = Math.floor(milestoneData.deadline.getTime() / 1000); // Convert to seconds
       const amountInMicroStx = stxToMicroStx(milestoneData.amount);
 
-      console.log('🔧 DEBUG: Calculated values:', {
-        deadlineTimestamp,
-        deadlineDate: new Date(deadlineTimestamp * 1000).toISOString(),
-        amountInMicroStx: `${amountInMicroStx} microSTX (${milestoneData.amount} STX)`
-      });
-
       // ✅ Validation: Check remaining balance
       if (amountInMicroStx > contract.remainingBalance) {
-        console.error('❌ Amount exceeds remaining balance');
         alert(`Error: Milestone amount (${milestoneData.amount} STX) exceeds remaining contract balance (${contract.remainingBalance / 1000000} STX)`);
         return;
       }
 
-      console.log('🚀 DEBUG: Calling addMilestone with Unix timestamp...');
       const result = await addMilestone(
         contract.id,
         milestoneData.description,
         amountInMicroStx,
         deadlineTimestamp  // ✅ FIXED: Now using Unix timestamp (seconds since epoch)
       );
-
-      console.log('📊 DEBUG: Transaction result:', result);
-
+      
       if (result.success) {
-        console.log('✅ SUCCESS: Milestone added successfully');
         setShowAddMilestone(false);
         onContractUpdate();
       } else {
-        console.error('❌ FAILED: Milestone creation failed:', result.error);
         alert(`Error adding milestone: ${result.error}`);
       }
     } catch (error) {
-      console.error('💥 EXCEPTION: Error in handleAddMilestone:', error);
       alert('Failed to add milestone: ' + (error as Error).message);
     } finally {
       setLoading(false);

@@ -65,15 +65,6 @@ export default function EnhancedDashboardPage() {
   
   const userAddress = userData?.profile?.stxAddress?.testnet || userData?.profile?.stxAddress?.mainnet;
   
-  // 🔧 DEBUG: Add this to see what's happening with contracts
-  useEffect(() => {
-    console.log('🔍 Dashboard contracts state updated:');
-    console.log('Client contracts:', clientContracts);
-    console.log('Freelancer contracts:', freelancerContracts);
-    console.log('User address:', userAddress);
-    console.log('Is signed in:', isSignedIn);
-  }, [clientContracts, freelancerContracts, userAddress, isSignedIn]);
-  
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -313,10 +304,8 @@ export default function EnhancedDashboardPage() {
               <button
                 onClick={async () => {
                   setContractsLoading(true);
-                  console.log('🔄 Manual refresh started...');
                   await refreshContracts();
                   setContractsLoading(false);
-                  console.log('✅ Manual refresh completed');
                 }}
                 disabled={contractsLoading}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
