@@ -243,11 +243,6 @@ export default function ContractDetailsPage() {
       // ✅ FIX: Ensure user input is treated as STX, then converted to microSTX
       const amountInSTX = parseFloat(milestoneForm.amount); // User enters STX (like 5.0)
       const amountInMicroSTX = Math.floor(amountInSTX * 1000000); // Convert to microSTX
-      
-      console.log('🔧 Amount conversion:', {
-        userInput: milestoneForm.amount + ' STX',
-        microSTX: amountInMicroSTX
-      });
 
       const result = await addMilestone(
         contract.id,

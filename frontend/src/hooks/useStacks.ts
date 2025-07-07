@@ -34,17 +34,14 @@ function convertSmartContractTimeToTimestamp(value: number): number {
 
   if (value > 1000000000) {
     // This looks like a Unix timestamp (in seconds) - convert to milliseconds
-    console.log(`🕐 Detected Unix timestamp: ${value} (${new Date(value * 1000).toISOString()})`);
     return value * 1000;
     
   } else if (value >= 100000 && value <= 300000) {
     // This looks like a Stacks block height - convert using block calculation
-    console.log(`🧱 Detected block height: ${value}`);
     return convertBlockHeightToTimestamp(value);
     
   } else {
     // Fallback for unexpected values
-    console.warn(`⚠️ Unexpected time value: ${value}, using current time`);
     return Date.now();
   }
 }
@@ -61,7 +58,7 @@ function convertBlockHeightToTimestamp(blockHeight: number): number {
 // ✅ FIXED: Proper Stacks.js v7 Network Configuration with API Key
 const getNetwork = () => {
   const networkType = process.env.NEXT_PUBLIC_NETWORK || 'testnet';
-  const apiKey = process.env.NEXT_PUBLIC_HIRO_API_KEY;
+  const apiKey = process.env.NEXT_PUBLIC_HIRO_API_KEY || '7d030816adf5527229ee20a9a36aaf5a';
   
   
   // Get base network using new v7 static objects
@@ -202,7 +199,6 @@ export const useStacks = () => {
       const address = userData?.profile?.stxAddress?.testnet || userData?.profile?.stxAddress?.mainnet;
       setUserAddress(address);
       
-      console.log('✅ User already signed in:', address);
     }
   }, []);
 
@@ -564,12 +560,10 @@ export const useStacks = () => {
   // ✅ REAL-TIME CONTROLS
   const enableRealTimeUpdates = useCallback(() => {
     setIsPollingEnabled(true);
-    console.log('🔄 Real-time updates enabled');
   }, []);
 
   const disableRealTimeUpdates = useCallback(() => {
     setIsPollingEnabled(false);
-    console.log('⏸️ Real-time updates disabled');
   }, []);
 
   const enableActivePolling = enableRealTimeUpdates;
