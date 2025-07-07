@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function POST(request: NextRequest, { params }: { params: { path: string[] } }) {
   try {
     // Your Hiro API key
-    const apiKey = process.env.NEXT_PUBLIC_HIRO_API_KEY || '49c6e72fb90e5b04c2f53721cd1f9a59';
+    const apiKey = process.env.NEXT_PUBLIC_HIRO_API_KEY;
     
     // Build the target URL
     const path = params.path.join('/');
@@ -17,9 +17,6 @@ export async function POST(request: NextRequest, { params }: { params: { path: s
     // Get request body
     const body = await request.json();
     
-    console.log('📡 Proxying to:', targetUrl);
-    console.log('🔑 Using API key:', apiKey.substring(0, 8) + '...');
-    console.log('📋 Request body:', JSON.stringify(body, null, 2));
     
     // ✅ PROPER HEADERS with API Key (using correct header name from docs)
     const headers: Record<string, string> = {
@@ -40,12 +37,9 @@ export async function POST(request: NextRequest, { params }: { params: { path: s
       body: JSON.stringify(body),
     });
     
-    console.log('📊 Response status:', response.status);
-    console.log('📊 Response headers:', Object.fromEntries(response.headers.entries()));
     
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('❌ API Error:', errorText);
       
       // Handle specific error types
       if (response.status === 429) {
@@ -79,7 +73,6 @@ export async function POST(request: NextRequest, { params }: { params: { path: s
     }
     
     const data = await response.json();
-    console.log('✅ Success - Response data keys:', Object.keys(data));
     
     // ✅ ADD CORS HEADERS for browser compatibility
     return NextResponse.json(data, {
@@ -91,7 +84,6 @@ export async function POST(request: NextRequest, { params }: { params: { path: s
     });
     
   } catch (error) {
-    console.error('❌ Proxy error:', error);
     
     const errorMessage = error instanceof Error ? error.message : 'Unknown proxy error';
     
@@ -123,7 +115,6 @@ export async function GET(request: NextRequest, { params }: { params: { path: st
     const queryString = searchParams.toString();
     const fullUrl = queryString ? `${targetUrl}?${queryString}` : targetUrl;
     
-    console.log('📡 GET Proxy to:', fullUrl);
     
     const headers: Record<string, string> = {
       'Accept': 'application/json',
@@ -141,7 +132,6 @@ export async function GET(request: NextRequest, { params }: { params: { path: st
     
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('❌ GET API Error:', errorText);
       
       return NextResponse.json(
         { 
@@ -153,7 +143,6 @@ export async function GET(request: NextRequest, { params }: { params: { path: st
     }
     
     const data = await response.json();
-    console.log('✅ GET Success');
     
     return NextResponse.json(data, {
       headers: {
@@ -164,7 +153,6 @@ export async function GET(request: NextRequest, { params }: { params: { path: st
     });
     
   } catch (error) {
-    console.error('❌ GET Proxy error:', error);
     
     return NextResponse.json(
       { 

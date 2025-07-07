@@ -1,9 +1,3 @@
-// src/app/contracts/[id]/page.tsx - Enhanced with Active Polling
-// BEFORE: Contract values were being rendered directly without unwrapping Clarity objects
-// This caused React to try to render objects like {type: "uint", value: "123"} directly
-
-// AFTER: Complete fix with proper Clarity value parsing throughout the component
-
 'use client';
 
 import React, { useState, useEffect } from 'react';
@@ -113,7 +107,6 @@ export default function ContractDetailsPage() {
       
       return safeContract;
     } catch (error) {
-      console.error('Error parsing contract data:', error);
       return null;
     }
   };
@@ -172,7 +165,6 @@ export default function ContractDetailsPage() {
           }
         }
       } catch (error) {
-        console.error('Error loading contract:', error);
       } finally {
         setLoading(false);
       }
@@ -248,11 +240,20 @@ export default function ContractDetailsPage() {
     if (!contract) return;
 
     try {
+      // ✅ FIX: Ensure user input is treated as STX, then converted to microSTX
+      const amountInSTX = parseFloat(milestoneForm.amount); // User enters STX (like 5.0)
+      const amountInMicroSTX = Math.floor(amountInSTX * 1000000); // Convert to microSTX
+      
+      console.log('🔧 Amount conversion:', {
+        userInput: milestoneForm.amount + ' STX',
+        microSTX: amountInMicroSTX
+      });
+
       const result = await addMilestone(
         contract.id,
         milestoneForm.description,
-        parseFloat(milestoneForm.amount),
-        new Date(milestoneForm.deadline).getTime()
+        amountInMicroSTX,
+        Math.floor(new Date(milestoneForm.deadline).getTime() / 1000)  // Convert to seconds
       );
 
       if (result.success) {
@@ -263,7 +264,6 @@ export default function ContractDetailsPage() {
         setContract(parseContractData(updatedContract));
       }
     } catch (error) {
-      console.error('Error adding milestone:', error);
     }
   };
 
@@ -280,7 +280,6 @@ export default function ContractDetailsPage() {
         setContract(parseContractData(updatedContract));
       }
     } catch (error) {
-      console.error('Error submitting milestone:', error);
     }
   };
 
@@ -295,7 +294,6 @@ export default function ContractDetailsPage() {
         setContract(parseContractData(updatedContract));
       }
     } catch (error) {
-      console.error('Error approving milestone:', error);
     }
   };
 
@@ -312,7 +310,6 @@ export default function ContractDetailsPage() {
         setContract(parseContractData(updatedContract));
       }
     } catch (error) {
-      console.error('Error rejecting milestone:', error);
     }
   };
 
@@ -608,6 +605,7 @@ export default function ContractDetailsPage() {
                       step="0.000001"
                       value={milestoneForm.amount}
                       onChange={(e) => setMilestoneForm(prev => ({ ...prev, amount: e.target.value }))}
+                      placeholder="5.0"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
                       required
                     />
@@ -775,5 +773,3 @@ export default function ContractDetailsPage() {
     </div>
   );
 }
-
-

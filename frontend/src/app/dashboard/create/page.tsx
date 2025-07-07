@@ -1,4 +1,3 @@
-// src/app/dashboard/create/page.tsx - Enhanced with Address Validation
 'use client';
 
 import { useState } from 'react';
@@ -54,7 +53,7 @@ export default function CreateContractPage() {
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
   const [txResult, setTxResult] = useState<{ success: boolean; error?: string; txId?: string } | null>(null);
 
-  // ✅ REAL-TIME VALIDATION (Enhanced with your address validation)
+  // ✅ REAL-TIME VALIDATION
   const validateField = (name: string, value: string): ValidationError[] => {
     const errors: ValidationError[] = [];
     
@@ -65,7 +64,6 @@ export default function CreateContractPage() {
         } else {
           const addressValidation = validateAddress(value.trim());
           if (!addressValidation) {
-            // errors.push({ field: name, message: addressValidation.error!, type: 'error' });
             errors.push({ field: name, message: 'Invalid Stacks address format', type: 'error' });
           } else {
             // Check if same as client
@@ -161,25 +159,19 @@ export default function CreateContractPage() {
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
 
-    console.log('🔍 Validating form data:', formData);
 
     // Validate freelancer address with detailed logging
     if (!formData.freelancer.trim()) {
       newErrors.freelancer = 'Freelancer address is required';
-      console.log('❌ Freelancer address is empty');
     } else {
       const address = formData.freelancer.trim();
-      console.log('🔍 Validating freelancer address:', address);
       
       // ✅ FIXED: Use validateAddress correctly (returns boolean)
       const isValid = validateAddress(address);
-      console.log('🔍 Address validation result:', isValid);
       
       if (!isValid) {
         newErrors.freelancer = 'Invalid Stacks address format';
-        console.log('❌ Address validation failed');
       } else {
-        console.log('✅ Address validation passed');
       }
     }
 
@@ -214,8 +206,6 @@ export default function CreateContractPage() {
     setErrors(newErrors);
     const isValid = Object.keys(newErrors).length === 0;
     
-    console.log('🔍 Form validation result:', isValid);
-    console.log('🔍 Form errors:', newErrors);
     
     return isValid;
   };
@@ -225,12 +215,10 @@ export default function CreateContractPage() {
     e.preventDefault();
     
     if (!validateForm()) {
-      console.log('❌ Form validation failed');
       return;
     }
 
     if (!isSignedIn) {
-      console.log('❌ User not signed in');
       setTxResult({ success: false, error: 'Please connect your wallet first' });
       return;
     }
@@ -244,7 +232,6 @@ export default function CreateContractPage() {
       return;
     }
 
-    console.log('🚀 Submitting contract creation...');
     
     try {
       const totalAmountMicroStx = parseFloat(formData.totalAmount) * 1000000; // Convert to microSTX
@@ -262,7 +249,6 @@ export default function CreateContractPage() {
       setTxResult(result);
       
       if (result.success) {
-        console.log('✅ Contract creation successful');
         // Reset form on success
         setFormData({
           freelancer: '',
@@ -278,10 +264,8 @@ export default function CreateContractPage() {
           router.push('/dashboard');
         }, 2000);
       } else {
-        console.log('❌ Contract creation failed:', result.error);
       }
     } catch (error) {
-      console.error('❌ Error in contract creation:', error);
       setTxResult({
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error occurred'
@@ -497,11 +481,3 @@ export default function CreateContractPage() {
     </div>
   );
 }
-
-
-
-
-
-
-
-

@@ -316,18 +316,18 @@ export function isValidStacksAddress(address: string): boolean {
   // Remove any whitespace
   const cleanAddress = address.trim();
 
-  // Check length (should be 41 characters)
-  if (cleanAddress.length !== 41) {
+  // ✅ FIX: Stacks addresses can be 40 OR 41 characters (not just 41)
+  if (cleanAddress.length < 40 || cleanAddress.length > 41) {
     return false;
   }
 
-  // Check if it starts with ST (mainnet) or SP (testnet)
+  // Check if it starts with ST (testnet) or SP (mainnet)
   if (!cleanAddress.startsWith('ST') && !cleanAddress.startsWith('SP')) {
     return false;
   }
 
-  // Check if the rest contains only valid characters (alphanumeric, case-insensitive)
-  const addressPattern = /^S[TP][A-Z0-9]{39}$/i;
+  // ✅ FIX: Updated regex to handle both 40 and 41 character addresses
+  const addressPattern = /^S[TP][A-Z0-9]{38,39}$/i;
   return addressPattern.test(cleanAddress);
 }
 
@@ -423,26 +423,3 @@ export function compareContracts(a: Contract, b: Contract, sortBy: 'date' | 'amo
       return 0;
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

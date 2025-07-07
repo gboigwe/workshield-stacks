@@ -30,7 +30,6 @@ export default function ContractListPage() {
   const [loadingContracts, setLoadingContracts] = useState(true);
   const [userRole, setUserRole] = useState<UserRole | null>(null);
 
-  // ✅ FIXED: Define progress calculation function locally to avoid import conflicts
   const calculateProgress = (milestones: any[]) => {
     if (!milestones || milestones.length === 0) {
       return { total: 0, completed: 0, percentage: 0 };
@@ -47,21 +46,11 @@ export default function ContractListPage() {
     if (isSignedIn && userData) {
       const loadContracts = async () => {
         const userAddress = userData.profile.stxAddress?.testnet || userData.profile.stxAddress?.mainnet;
-        console.log('👤 Your current wallet address:', userAddress);
-        console.log('🏠 Contract client address: STDCC1840NWS58QP44QMKC2BRX06VTRCZ7TGK95P');
-        console.log('👷 Contract freelancer address: ST3A5HQKQM3T3BV1MCZ45S6Q729V8355BQ0W0NP2V');
-        console.log('🔍 Do addresses match?', 
-          userAddress === 'STDCC1840NWS58QP44QMKC2BRX06VTRCZ7TGK95P' || 
-          userAddress === 'ST3A5HQKQM3T3BV1MCZ45S6Q729V8355BQ0W0NP2V'
-        );
       
         if (userAddress) {
           setLoadingContracts(true);
           try {
-            console.log('🔍 Fetching contracts for user:', userAddress);
             const fetchedContracts = await fetchUserContracts(userAddress);
-            console.log('📦 Fetched contracts from blockchain:', fetchedContracts);
-            console.log('📊 Number of contracts found:', fetchedContracts.length);
             setContracts(fetchedContracts);
             
             // Determine primary role
@@ -77,7 +66,6 @@ export default function ContractListPage() {
             }
             
           } catch (error) {
-            console.error('Error loading contracts:', error);
           } finally {
             setLoadingContracts(false);
           }
@@ -188,7 +176,6 @@ export default function ContractListPage() {
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {contracts.map((contract, index) => {
               const statusInfo = getContractStatusInfo(contract.status);
-              // ✅ FIXED: Use local progress calculation function
               const progress = calculateProgress(contract.milestones);
               
               return (
@@ -238,7 +225,7 @@ export default function ContractListPage() {
                     </div>
                   </div>
 
-                  {/* Progress Bar - ✅ FIXED: Now properly accessing object properties */}
+                  {/* Progress Bar */}
                   <div className="mb-4">
                     <div className="flex justify-between text-sm text-gray-600 mb-2">
                       <span>Progress</span>
