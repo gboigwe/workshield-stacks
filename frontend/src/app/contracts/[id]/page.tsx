@@ -107,6 +107,7 @@ export default function ContractDetailsPage() {
       
       return safeContract;
     } catch (error) {
+      console.error('Error parsing contract data:', error);
       return null;
     }
   };
@@ -165,6 +166,7 @@ export default function ContractDetailsPage() {
           }
         }
       } catch (error) {
+        console.error('Error loading contract:', error);
       } finally {
         setLoading(false);
       }
@@ -264,6 +266,7 @@ export default function ContractDetailsPage() {
         setContract(parseContractData(updatedContract));
       }
     } catch (error) {
+      console.error('Error adding milestone:', error);
     }
   };
 
@@ -280,6 +283,7 @@ export default function ContractDetailsPage() {
         setContract(parseContractData(updatedContract));
       }
     } catch (error) {
+      console.error('Error submitting milestone:', error);
     }
   };
 
@@ -294,6 +298,7 @@ export default function ContractDetailsPage() {
         setContract(parseContractData(updatedContract));
       }
     } catch (error) {
+      console.error('Error approving milestone:', error);
     }
   };
 
@@ -310,6 +315,7 @@ export default function ContractDetailsPage() {
         setContract(parseContractData(updatedContract));
       }
     } catch (error) {
+      console.error('Error rejecting milestone:', error);
     }
   };
 

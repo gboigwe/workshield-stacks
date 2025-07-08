@@ -17,7 +17,7 @@ import {
   validateStacksAddress
 } from '@stacks/transactions';
 import { STACKS_TESTNET, STACKS_MAINNET } from '@stacks/network';
-import { createApiKeyMiddleware, createFetchFn } from '@stacks/common';
+
 import { Contract, Milestone, TransactionResponse, isValidStacksAddress } from '@/types';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 
@@ -58,45 +58,57 @@ function convertBlockHeightToTimestamp(blockHeight: number): number {
   return approximateTimestamp * 1000; // Convert to milliseconds
 }
 
-// ✅ FIXED: Proper Stacks.js v7 Network Configuration with API Key
+// ✅ NETWORK CONFIGURATION with API Key Headers
 const getNetwork = () => {
   const networkType = process.env.NEXT_PUBLIC_NETWORK || 'testnet';
-  const apiKey = process.env.NEXT_PUBLIC_HIRO_API_KEY;
-  
-  
+  const apiKey = process.env.NEXT_PUBLIC_HIRO_API_KEY || '49c6e72fb90e5b04c2f53721cd1f9a59';
+
+  console.log(`🌐 Network: ${networkType}, API Key: ${apiKey ? 'Set ✅' : 'Missing ❌'}`);
+
   // Get base network using new v7 static objects
   const baseNetwork = networkType === 'mainnet' ? STACKS_MAINNET : STACKS_TESTNET;
-  
+
+  // ✅ ADD: Custom fetch function with API key headers
   if (apiKey) {
-    
-    // ✅ PROPER v7 API KEY SETUP
-    const apiMiddleware = createApiKeyMiddleware({
-      apiKey: apiKey
-    });
-    
-    const customFetchFn = createFetchFn(apiMiddleware);
-    
+    const customFetch = async (url: string, init?: RequestInit) => {
+      const headers = {
+        ...init?.headers,
+        'X-API-Key': apiKey,
+        'Content-Type': 'application/json',
+      };
+
+      return fetch(url, {
+        ...init,
+        headers,
+      });
+    };
+
     return {
       ...baseNetwork,
-      fetchFn: customFetchFn
+      fetchFn: customFetch,
     };
-  } else {
-    return baseNetwork;
   }
+
+  return baseNetwork;
 };
 
 // ✅ FALLBACK: Proxy-based API calls for CORS issues
 const makeProxyApiCall = async (endpoint: string, body?: any) => {
   const proxyUrl = `/api/stacks${endpoint}`;
-  
+
   try {
-    
+
+    // ✅ FIX: Handle BigInt serialization
+    const serializedBody = body ? JSON.stringify(body, (_key, value) =>
+      typeof value === 'bigint' ? value.toString() : value
+    ) : undefined;
+
     const response = await fetch(proxyUrl, {
       method: body ? 'POST' : 'GET',
       headers: {
         'Content-Type': 'application/json',
       },
-      ...(body && { body: JSON.stringify(body) })
+      ...(body && { body: serializedBody })
     });
 
     if (!response.ok) {
@@ -106,6 +118,7 @@ const makeProxyApiCall = async (endpoint: string, body?: any) => {
 
     return await response.json();
   } catch (error) {
+    console.error('❌ Proxy API call failed:', error);
     throw error;
   }
 };
@@ -114,13 +127,26 @@ const makeProxyApiCall = async (endpoint: string, body?: any) => {
 const makeSmartApiCall = async (apiCall: () => Promise<any>, fallbackEndpoint?: string, fallbackBody?: any) => {
   try {
     // First try direct Stacks.js call with API key
+    console.log('🎯 Attempting direct Stacks.js API call...');
     return await apiCall();
   } catch (error: any) {
-    
+    console.warn('⚠️ Direct call failed:', {
+      message: error.message,
+      status: error.status,
+      code: error.code,
+      details: error
+    });
+
     if (fallbackEndpoint) {
       try {
+        console.log('🔄 Trying proxy fallback for:', fallbackEndpoint);
         return await makeProxyApiCall(fallbackEndpoint, fallbackBody);
-      } catch (proxyError) {
+      } catch (proxyError: any) {
+        console.error('❌ Both direct and proxy calls failed:', {
+          directError: error.message,
+          proxyError: proxyError.message,
+          fallbackEndpoint
+        });
         throw proxyError;
       }
     } else {
@@ -133,7 +159,7 @@ const network = getNetwork();
 
 // Contract Configuration
 const CONTRACTS = {
-  ESCROW: process.env.NEXT_PUBLIC_ESCROW_CONTRACT || 'ST3A5HQKQM3T3BV1MCZ45S6Q729V8355BQ0W0NP2V.workshield-escrow-v2',
+  ESCROW: process.env.NEXT_PUBLIC_ESCROW_CONTRACT || 'ST3A5HQKQM3T3BV1MCZ45S6Q729V8355BQ0W0NP2V.workshield-escrow-v3',
   PAYMENTS: process.env.NEXT_PUBLIC_PAYMENTS_CONTRACT || 'ST3A5HQKQM3T3BV1MCZ45S6Q729V8355BQ0W0NP2V.workshield-payments',
   DISPUTE: process.env.NEXT_PUBLIC_DISPUTE_CONTRACT || 'ST3A5HQKQM3T3BV1MCZ45S6Q729V8355BQ0W0NP2V.workshield-dispute'
 };
@@ -156,6 +182,7 @@ const isDataFresh = (timestamp: number) => {
 const getCachedData = <T>(key: string): T | null => {
   const cached = contractCache.get(key);
   if (cached && isDataFresh(cached.timestamp)) {
+    console.log(`📋 Using cached data for ${key}`);
     return cached.data;
   }
   return null;
@@ -163,6 +190,7 @@ const getCachedData = <T>(key: string): T | null => {
 
 const setCachedData = <T>(key: string, data: T) => {
   contractCache.set(key, { data, timestamp: Date.now() });
+  console.log(`💾 Cached data for ${key}`);
 };
 
 // React Query Configuration
@@ -239,6 +267,7 @@ export const useStacks = () => {
       setCachedData(cacheKey, totalContracts);
       return totalContracts;
     } catch (error) {
+      console.error('❌ Error fetching total contracts:', error);
       return 0;
     }
   }, []);
@@ -264,7 +293,7 @@ export const useStacks = () => {
           contractAddress: escrowContract.address,
           contractName: escrowContract.name,
           functionName: 'get-milestone',
-          functionArgs: [uintCV(contractId), uintCV(milestoneId)],
+          functionArgs: [contractId, milestoneId], // ✅ FIX: Use plain numbers instead of uintCV for proxy
           senderAddress: userAddress || escrowContract.address,
         }
       );
@@ -287,9 +316,11 @@ export const useStacks = () => {
         rejectionReason: data['rejection-reason']?.value || data['rejection-reason'] || '',
       };
 
+      console.log(`✅ Fetched milestone ${contractId}-${milestoneId}:`, milestone);
       setCachedData(cacheKey, milestone);
       return milestone;
     } catch (error) {
+      console.error(`❌ Error fetching milestone ${contractId}-${milestoneId}:`, error);
       return null;
     }
   }, [userAddress]);
@@ -300,6 +331,7 @@ export const useStacks = () => {
     if (cached !== null) return cached;
 
     try {
+      console.log(`📋 Fetching milestones for contract ${contractId}`);
       const milestones: Milestone[] = [];
       
       // Try to fetch up to 50 milestones (reasonable limit)
@@ -309,9 +341,11 @@ export const useStacks = () => {
         milestones.push(milestone);
       }
       
+      console.log(`✅ Found ${milestones.length} milestones for contract ${contractId}`);
       setCachedData(cacheKey, milestones);
       return milestones;
     } catch (error) {
+      console.error(`❌ Error fetching milestones for contract ${contractId}:`, error);
       return [];
     }
   }, [fetchMilestoneById]);
@@ -322,6 +356,7 @@ export const useStacks = () => {
     if (cached !== null) return cached;
 
     try {
+      console.log(`🔍 Fetching contract ID: ${contractId}`);
 
       const result = await makeSmartApiCall(
         () => fetchCallReadOnlyFunction({
@@ -337,7 +372,7 @@ export const useStacks = () => {
           contractAddress: escrowContract.address,
           contractName: escrowContract.name,
           functionName: 'get-contract',
-          functionArgs: [uintCV(contractId)],
+          functionArgs: [contractId], // ✅ FIX: Use plain number instead of uintCV for proxy
           senderAddress: escrowContract.address,
         }
       );
@@ -363,12 +398,15 @@ export const useStacks = () => {
           milestones: milestones
         };
         
+        console.log(`✅ Fetched contract ${contractId}:`, contract);
         setCachedData(cacheKey, contract);
         return contract;
       } else {
+        console.log(`❌ No data found for contract ${contractId}`);
         return null;
       }
     } catch (error) {
+      console.error(`❌ Error fetching contract ${contractId}:`, error);
       return null;
     }
   }, [fetchMilestonesByContract]);
@@ -377,7 +415,9 @@ export const useStacks = () => {
     if (!userAddress) return [];
 
     try {
+      console.log(`🚀 Fetching contracts for user ${userAddress}`);
       const totalContracts = await fetchTotalContractsCount();
+      console.log(`📊 Checking ${totalContracts} contracts for user involvement...`);
       
       const contracts: Contract[] = [];
       
@@ -394,6 +434,7 @@ export const useStacks = () => {
         for (const contract of batchResults) {
           if (contract && (contract.client === userAddress || contract.freelancer === userAddress)) {
             contracts.push(contract);
+            console.log(`✅ Added contract ${contract.id} (user is ${contract.client === userAddress ? 'client' : 'freelancer'})`);
           }
         }
         
@@ -403,8 +444,10 @@ export const useStacks = () => {
         }
       }
       
+      console.log(`🎯 RESULT: Found ${contracts.length} contracts for user`);
       return contracts;
     } catch (error) {
+      console.error('❌ Error fetching user contracts:', error);
       return [];
     }
   }, [fetchTotalContractsCount, fetchContractByIdInternal]);
@@ -419,7 +462,7 @@ export const useStacks = () => {
     queryFn: () => fetchUserContractsInternal(userAddress!),
     enabled: !!userAddress && isSignedIn,
     ...QUERY_CONFIG,
-    refetchInterval: isPollingEnabled ? 30000 : false, // Poll every 30 seconds if enabled
+    // refetchInterval: isPollingEnabled ? 30000 : false, // Poll every 30 seconds if enabled
   });
 
   // ✅ DERIVED STATE
@@ -430,6 +473,7 @@ export const useStacks = () => {
   const refreshContracts = useCallback(async () => {
     if (!userAddress) return;
     
+    console.log('🔄 Refreshing contracts...');
     // ✅ FIXED: Use Map methods consistently
     contractCache.clear();
     // Invalidate React Query cache
@@ -439,16 +483,56 @@ export const useStacks = () => {
 
   const debugContractSystem = useCallback(async () => {
     try {
-      
+      console.log('🔍 DEBUG: Contract System Status');
+      console.log('📡 Network:', network);
+      console.log('👤 User Address:', userAddress);
+      console.log('🔐 Is Signed In:', isSignedIn);
+      console.log('📊 Client Contracts:', clientContracts.length);
+      console.log('💼 Freelancer Contracts:', freelancerContracts.length);
+      console.log('⚙️ Contracts Config:', CONTRACTS);
+      console.log('🏗️ Escrow Contract:', escrowContract);
+
+      // Test if contract exists
+      try {
+        console.log('🧪 Testing contract existence...');
+        const contractInfo = await fetch(`https://api.testnet.hiro.so/v1/contracts/${escrowContract.address}/${escrowContract.name}`);
+        console.log('📋 Contract Info Response:', contractInfo.status, contractInfo.statusText);
+
+        if (contractInfo.ok) {
+          const contractData = await contractInfo.json();
+          console.log('✅ Contract exists:', contractData);
+        } else {
+          console.log('❌ Contract does not exist or is not deployed');
+
+          // Try to check if any version of the contract exists
+          console.log('🔍 Checking for other contract versions...');
+          const versions = ['workshield-escrow', 'workshield-escrow-v2', 'workshield-escrow-v3'];
+          for (const version of versions) {
+            try {
+              const versionCheck = await fetch(`https://api.testnet.hiro.so/v1/contracts/${escrowContract.address}/${version}`);
+              console.log(`📋 ${version}: ${versionCheck.status} ${versionCheck.statusText}`);
+            } catch (e) {
+              console.log(`❌ Error checking ${version}:`, e);
+            }
+          }
+        }
+      } catch (contractError) {
+        console.error('❌ Error checking contract existence:', contractError);
+      }
+
       if (userAddress) {
+        console.log('🔄 Fetching fresh contract data...');
         const totalContracts = await fetchTotalContractsCount();
+        console.log('📈 Total Contracts on Blockchain:', totalContracts);
       }
     } catch (error) {
+      console.error('❌ Debug Error:', error);
     }
   }, [userAddress, isSignedIn, clientContracts, freelancerContracts, fetchTotalContractsCount]);
 
   // ✅ WALLET CONNECTION
   const connectWallet = useCallback(() => {
+    console.log('🔌 Connecting wallet...');
     
     showConnect({
       appDetails: {
@@ -457,6 +541,7 @@ export const useStacks = () => {
       },
       redirectTo: '/',
       onFinish: () => {
+        console.log('✅ Wallet connected successfully');
         const userData = userSession.loadUserData();
         setUserData(userData);
         setIsSignedIn(true);
@@ -470,6 +555,7 @@ export const useStacks = () => {
         }
       },
       onCancel: () => {
+        console.log('❌ Wallet connection cancelled');
       },
     });
   }, [queryClient]);
@@ -480,6 +566,7 @@ export const useStacks = () => {
     setIsSignedIn(false);
     setUserAddress(null);
     queryClient.clear();
+    console.log('🔌 Wallet disconnected');
   }, [queryClient]);
 
   // ✅ CONTRACT CREATION with proper validation (KEEP THIS!)
@@ -507,7 +594,14 @@ export const useStacks = () => {
     setTransactionInProgress(true);
 
     try {
-      
+      console.log('🔧 Creating escrow with parameters:', {
+        client,
+        freelancer,
+        description: description.substring(0, 50) + '...',
+        endDate,
+        totalAmount
+      });
+
       return new Promise((resolve) => {
         openContractCall({
           network,
@@ -525,6 +619,7 @@ export const useStacks = () => {
           postConditions: [],
           postConditionMode: PostConditionMode.Allow,
           onFinish: async (data: any) => {
+            console.log('✅ Contract created successfully:', data);
             setTransactionInProgress(false);
             
             // ✅ FIXED: Clear cache using proper async method
@@ -542,6 +637,7 @@ export const useStacks = () => {
             });
           },
           onCancel: () => {
+            console.log('❌ Transaction cancelled by user');
             setTransactionInProgress(false);
             resolve({ 
               success: false, 
@@ -552,6 +648,7 @@ export const useStacks = () => {
       });
 
     } catch (error) {
+      console.error('❌ Error in createEscrow:', error);
       setTransactionInProgress(false);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       return { 
@@ -577,7 +674,6 @@ export const useStacks = () => {
 
   // ✅ ADDRESS VALIDATION HELPER (KEEP THIS!)
   const validateAddress = useCallback((address: string) => {
-    const networkType = process.env.NEXT_PUBLIC_NETWORK === 'mainnet' ? 'mainnet' : 'testnet';
     return validateStacksAddress(address);
   }, []);
 
@@ -595,12 +691,20 @@ export const useStacks = () => {
       return { success: false, error: 'Wallet not connected' };
     }
 
-
+    console.log('🔧 DEBUG: addMilestone called with:', {
+      contractId,
+      description: description.substring(0, 30) + '...',
+      amount: `${amount} microSTX (${amount / 1000000} STX)`,
+      deadline: `Unix timestamp ${deadline} (${new Date(deadline * 1000).toISOString()})`,
+      userAddress,
+      network: process.env.NEXT_PUBLIC_NETWORK
+    });
 
     setTransactionInProgress(true);
 
     try {
       return new Promise((resolve) => {
+        console.log('📡 DEBUG: Opening contract call for add-milestone...');
         
         openContractCall({
           network,
@@ -616,7 +720,10 @@ export const useStacks = () => {
           postConditions: [],
           postConditionMode: PostConditionMode.Allow,
           onFinish: (data: any) => {
-            
+            console.log('✅ DEBUG: add-milestone transaction completed successfully:', {
+              txId: data.txId,
+              timestamp: new Date().toISOString()
+            });
             
             setTransactionInProgress(false);
             
@@ -632,12 +739,14 @@ export const useStacks = () => {
             resolve({ success: true, txId: data.txId });
           },
           onCancel: () => {
+            console.log('❌ DEBUG: add-milestone transaction cancelled by user');
             setTransactionInProgress(false);
             resolve({ success: false, error: 'Transaction cancelled by user' });
           }
         });
       });
     } catch (error) {
+      console.error('💥 DEBUG: Exception in addMilestone:', error);
       setTransactionInProgress(false);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       return { 
@@ -704,6 +813,8 @@ export const useStacks = () => {
 
     try {
       setTransactionInProgress(true);
+      console.log(`🚀 DEBUG: Approving milestone ${contractId}-${milestoneIndex}...`);
+
       await openContractCall({
         network,
         contractAddress: escrowContract.address,
@@ -715,6 +826,7 @@ export const useStacks = () => {
         ],
         postConditionMode: PostConditionMode.Allow, // ✅ FIXED: Allow STX transfers
         onFinish: (data) => {
+          console.log('✅ Milestone approval submitted:', data.txId);
           
           setTimeout(() => {
             queryClient.invalidateQueries({ queryKey: QUERY_KEYS.contracts(userAddress!) });
@@ -727,12 +839,14 @@ export const useStacks = () => {
           setTransactionInProgress(false);
         },
         onCancel: () => {
+          console.log('❌ Transaction cancelled');
           setTransactionInProgress(false);
         },
       });
 
       return { success: true, txId: 'pending' };
     } catch (error: any) {
+      console.error('❌ Error approving milestone:', error);
       setTransactionInProgress(false);
       const errorMessage = error?.message || 'Unknown error';
       return { success: false, error: errorMessage };
@@ -810,7 +924,7 @@ export const useStacks = () => {
       approveMilestone: () => Promise.resolve({ success: false, error: 'Not mounted' }),
       rejectMilestone: () => Promise.resolve({ success: false, error: 'Not mounted' }),
       enableRealTimeUpdates: () => {},
-      disableRealTimeUpdates: () => {},
+      // disableRealTimeUpdates: () => {},
       isPollingEnabled: false,
       validateAddress: () => false,
     };
