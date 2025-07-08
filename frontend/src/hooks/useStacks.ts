@@ -25,25 +25,20 @@ import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 const appConfig = new AppConfig(['store_write', 'publish_data']);
 const userSession = new UserSession({ appConfig });
 
-// Add this function at the top of the file
 function convertSmartContractTimeToTimestamp(value: number): number {
-  // Handle invalid or zero values
   if (!value || value === 0) {
-    return Date.now(); // Use current time as fallback
+    return Date.now(); 
   }
 
   if (value > 1000000000) {
-    // This looks like a Unix timestamp (in seconds) - convert to milliseconds
     console.log(`🕐 Detected Unix timestamp: ${value} (${new Date(value * 1000).toISOString()})`);
     return value * 1000;
     
   } else if (value >= 100000 && value <= 300000) {
-    // This looks like a Stacks block height - convert using block calculation
     console.log(`🧱 Detected block height: ${value}`);
     return convertBlockHeightToTimestamp(value);
     
   } else {
-    // Fallback for unexpected values
     console.warn(`⚠️ Unexpected time value: ${value}, using current time`);
     return Date.now();
   }
