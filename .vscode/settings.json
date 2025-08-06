@@ -1,4 +1,5 @@
 
 {
-    "files.eol": "\n"
+    "files.eol": "\n",
+    "markdown.validate.enabled": true
 }
