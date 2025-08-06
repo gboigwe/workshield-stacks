@@ -4,10 +4,15 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { AnimatePresence } from 'framer-motion';
 import { useStacks } from '@/hooks/useStacks';
+import { useOrganizations } from '@/hooks/useOrganizations';
 import { 
   User, 
   Briefcase, 
-  Plus
+  Plus,
+  Building,
+  Filter,
+  Search,
+  X
 } from 'lucide-react';
 import { 
   Contract, 
@@ -33,10 +38,19 @@ export default function EnhancedDashboardPage() {
     debugContractSystem,
   } = useStacks();
 
+  const { organizations } = useOrganizations();
+
   
   const [mounted, setMounted] = useState(false);
   const [activeTab, setActiveTab] = useState<UserRole>(UserRole.CLIENT);
   const [contractsLoading, setContractsLoading] = useState(true);
+  
+  // New filtering states
+  const [showFilters, setShowFilters] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedOrg, setSelectedOrg] = useState<string>('all');
+  const [selectedStatus, setSelectedStatus] = useState<string>('all');
+  const [selectedToken, setSelectedToken] = useState<string>('all');
   
   useEffect(() => {
     setMounted(true);
@@ -96,10 +110,68 @@ export default function EnhancedDashboardPage() {
     };
   };
 
-  const clientStats = calculateStats(clientContracts, UserRole.CLIENT);
-  const freelancerStats = calculateStats(freelancerContracts, UserRole.FREELANCER);
+  // Filter contracts based on search and filter criteria
+  const filterContracts = (contracts: Contract[]) => {
+    return contracts.filter(contract => {
+      // Search filter
+      if (searchTerm) {
+        const searchLower = searchTerm.toLowerCase();
+        const matchesSearch = 
+          contract.description.toLowerCase().includes(searchLower) ||
+          contract.freelancer.toLowerCase().includes(searchLower) ||
+          contract.client.toLowerCase().includes(searchLower);
+        
+        if (!matchesSearch) return false;
+      }
+
+      // Organization filter
+      if (selectedOrg !== 'all') {
+        // For now, we'll simulate organization filtering
+        // In a real implementation, contracts would have orgId field
+        const contractOrgId = (contract as any).orgId;
+        if (contractOrgId !== parseInt(selectedOrg)) return false;
+      }
+
+      // Status filter
+      if (selectedStatus !== 'all') {
+        const statusMatch = {
+          'active': ContractStatus.ACTIVE,
+          'completed': ContractStatus.COMPLETED,
+          'disputed': ContractStatus.DISPUTED,
+          'cancelled': ContractStatus.CANCELLED
+        }[selectedStatus];
+        
+        if (contract.status !== statusMatch) return false;
+      }
+
+      // Token filter (simulated for now)
+      if (selectedToken !== 'all') {
+        const contractToken = (contract as any).tokenType || 'STX';
+        if (contractToken !== selectedToken) return false;
+      }
+
+      return true;
+    });
+  };
+
+  const filteredClientContracts = filterContracts(clientContracts);
+  const filteredFreelancerContracts = filterContracts(freelancerContracts);
+
+  const clientStats = calculateStats(filteredClientContracts, UserRole.CLIENT);
+  const freelancerStats = calculateStats(filteredFreelancerContracts, UserRole.FREELANCER);
   const currentStats = activeTab === UserRole.CLIENT ? clientStats : freelancerStats;
-  const currentContracts = activeTab === UserRole.CLIENT ? clientContracts : freelancerContracts;
+  const currentContracts = activeTab === UserRole.CLIENT ? filteredClientContracts : filteredFreelancerContracts;
+
+  // Clear filters function
+  const clearFilters = () => {
+    setSearchTerm('');
+    setSelectedOrg('all');
+    setSelectedStatus('all');
+    setSelectedToken('all');
+  };
+
+  // Check if any filters are active
+  const hasActiveFilters = searchTerm !== '' || selectedOrg !== 'all' || selectedStatus !== 'all' || selectedToken !== 'all';
 
   if (loading || !mounted) {
     return (
@@ -152,6 +224,14 @@ export default function EnhancedDashboardPage() {
               </button>
               
               <button
+                onClick={() => router.push('/dashboard/organizations')}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2"
+              >
+                <Building className="w-4 h-4" />
+                Organizations
+              </button>
+              
+              <button
                 onClick={() => router.push('/dashboard/create')}
                 className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors flex items-center gap-2"
               >
@@ -176,7 +256,7 @@ export default function EnhancedDashboardPage() {
               >
                 <div className="flex items-center gap-2">
                   <Briefcase className="w-4 h-4" />
-                  Client Contracts ({clientContracts.length})
+                  Client Contracts ({filteredClientContracts.length})
                 </div>
               </button>
               <button
@@ -189,11 +269,120 @@ export default function EnhancedDashboardPage() {
               >
                 <div className="flex items-center gap-2">
                   <User className="w-4 h-4" />
-                  Freelancer Contracts ({freelancerContracts.length})
+                  Freelancer Contracts ({filteredFreelancerContracts.length})
                 </div>
               </button>
             </nav>
           </div>
+        </div>
+
+        {/* Search and Filters */}
+        <div className="mb-6">
+          <div className="flex flex-col sm:flex-row gap-4">
+            {/* Search Bar */}
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <input
+                type="text"
+                placeholder="Search contracts..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 w-full"
+              />
+            </div>
+
+            {/* Filter Toggle */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowFilters(!showFilters)}
+                className={`flex items-center gap-2 px-4 py-2 border rounded-lg transition-colors ${
+                  showFilters || hasActiveFilters
+                    ? 'border-orange-500 bg-orange-50 text-orange-700'
+                    : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                <Filter className="w-4 h-4" />
+                Filters
+                {hasActiveFilters && (
+                  <span className="bg-orange-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                    {[searchTerm, selectedOrg, selectedStatus, selectedToken].filter(f => f !== '' && f !== 'all').length}
+                  </span>
+                )}
+              </button>
+
+              {hasActiveFilters && (
+                <button
+                  onClick={clearFilters}
+                  className="flex items-center gap-1 px-3 py-2 text-sm text-gray-600 hover:text-gray-800"
+                >
+                  <X className="w-3 h-3" />
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Filter Panel */}
+          {showFilters && (
+            <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {/* Organization Filter */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Organization
+                  </label>
+                  <select
+                    value={selectedOrg}
+                    onChange={(e) => setSelectedOrg(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  >
+                    <option value="all">All Organizations</option>
+                    <option value="individual">Individual Contracts</option>
+                    {organizations.map(org => (
+                      <option key={org.id} value={org.id.toString()}>
+                        {org.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Status Filter */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Status
+                  </label>
+                  <select
+                    value={selectedStatus}
+                    onChange={(e) => setSelectedStatus(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  >
+                    <option value="all">All Status</option>
+                    <option value="active">Active</option>
+                    <option value="completed">Completed</option>
+                    <option value="disputed">Disputed</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
+                </div>
+
+                {/* Token Filter */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Token Type
+                  </label>
+                  <select
+                    value={selectedToken}
+                    onChange={(e) => setSelectedToken(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  >
+                    <option value="all">All Tokens</option>
+                    <option value="STX">STX</option>
+                    <option value="sBTC">sBTC</option>
+                    <option value="other">Custom Tokens</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Statistics Cards */}

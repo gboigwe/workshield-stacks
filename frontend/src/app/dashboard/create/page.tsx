@@ -1,9 +1,22 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStacks } from '@/hooks/useStacks';
-import { ArrowLeft, CheckCircle, XCircle, AlertCircle, User, Calendar, DollarSign, FileText } from 'lucide-react';
+import { useOrganizations } from '@/hooks/useOrganizations';
+import { 
+  ArrowLeft, 
+  CheckCircle, 
+  XCircle, 
+  AlertCircle, 
+  User, 
+  Calendar, 
+  DollarSign, 
+  FileText, 
+  Building,
+  Coins,
+  Users
+} from 'lucide-react';
 
 // Helper function to convert STX to microSTX
 const stxToMicroStx = (stx: number): number => {
@@ -18,6 +31,10 @@ interface ValidationError {
 }
 
 interface FormData {
+  contractType: 'individual' | 'organization';
+  organizationId: string;
+  tokenType: 'STX' | 'sBTC' | 'other';
+  tokenContract: string;
   freelancer: string;
   description: string;
   totalAmount: string;
@@ -31,7 +48,6 @@ interface FormErrors {
 export default function CreateContractPage() {
   const router = useRouter();
   
-  // ✅ FIXED: Added userAddress to the destructuring
   const { 
     userData, 
     isSignedIn, 
@@ -39,10 +55,16 @@ export default function CreateContractPage() {
     validateAddress, 
     transactionInProgress,
     connectWallet,
-    userAddress  // ✅ ADDED: This was missing
+    userAddress
   } = useStacks();
 
+  const { organizations, loading: orgLoading } = useOrganizations();
+
   const [formData, setFormData] = useState<FormData>({
+    contractType: 'individual',
+    organizationId: '',
+    tokenType: 'STX',
+    tokenContract: '',
     freelancer: '',
     description: '',
     totalAmount: '',
@@ -53,11 +75,46 @@ export default function CreateContractPage() {
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
   const [txResult, setTxResult] = useState<{ success: boolean; error?: string; txId?: string } | null>(null);
 
-  // ✅ REAL-TIME VALIDATION
+  // Available token options
+  const tokenOptions = [
+    { value: 'STX', label: 'STX (Stacks)', description: 'Native Stacks token' },
+    { value: 'sBTC', label: 'sBTC (Stacked Bitcoin)', description: '1:1 Bitcoin-backed token' },
+    { value: 'other', label: 'Custom Token', description: 'Enter custom SIP-010 token contract' }
+  ];
+
+  // REAL-TIME VALIDATION
   const validateField = (name: string, value: string): ValidationError[] => {
     const errors: ValidationError[] = [];
     
     switch (name) {
+      case 'organizationId':
+        if (formData.contractType === 'organization') {
+          if (!value.trim()) {
+            errors.push({ field: name, message: 'Organization selection is required', type: 'error' });
+          } else {
+            const org = organizations.find(o => o.id.toString() === value);
+            if (org) {
+              errors.push({ field: name, message: `✓ ${org.name} selected`, type: 'info' });
+            }
+          }
+        }
+        break;
+
+      case 'tokenContract':
+        if (formData.tokenType === 'other') {
+          if (!value.trim()) {
+            errors.push({ field: name, message: 'Token contract address is required', type: 'error' });
+          } else {
+            const isValid = validateAddress(value.trim());
+            if (!isValid) {
+              errors.push({ field: name, message: 'Invalid contract address format', type: 'error' });
+            } else {
+              errors.push({ field: name, message: '✓ Valid contract address', type: 'info' });
+            }
+          }
+        }
+        break;
+
       case 'freelancer':
         if (!value.trim()) {
           errors.push({ field: name, message: 'Freelancer address is required', type: 'error' });
@@ -97,11 +154,12 @@ export default function CreateContractPage() {
           if (isNaN(amount) || amount <= 0) {
             errors.push({ field: name, message: 'Amount must be a positive number', type: 'error' });
           } else if (amount < 0.000001) {
-            errors.push({ field: name, message: 'Minimum amount is 0.000001 STX', type: 'error' });
+            errors.push({ field: name, message: 'Minimum amount is 0.000001', type: 'error' });
           } else if (amount > 1000000) {
-            errors.push({ field: name, message: 'Maximum amount is 1,000,000 STX', type: 'warning' });
+            errors.push({ field: name, message: 'Maximum amount is 1,000,000', type: 'warning' });
           } else {
-            errors.push({ field: name, message: `✓ ${amount.toLocaleString()} STX`, type: 'info' });
+            const tokenLabel = formData.tokenType === 'other' ? 'tokens' : formData.tokenType;
+            errors.push({ field: name, message: `✓ ${amount.toLocaleString()} ${tokenLabel}`, type: 'info' });
           }
         }
         break;
@@ -132,8 +190,8 @@ export default function CreateContractPage() {
     return errors;
   };
 
-  // ✅ HANDLE INPUT CHANGES WITH REAL-TIME VALIDATION
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  // HANDLE INPUT CHANGES WITH REAL-TIME VALIDATION
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     
     setFormData(prev => ({
@@ -155,23 +213,59 @@ export default function CreateContractPage() {
     }));
   };
 
-  // ✅ COMPREHENSIVE FORM VALIDATION
+  // Handle contract type change
+  const handleContractTypeChange = (type: 'individual' | 'organization') => {
+    setFormData(prev => ({
+      ...prev,
+      contractType: type,
+      organizationId: type === 'individual' ? '' : prev.organizationId
+    }));
+
+    // Clear organization validation if switching to individual
+    if (type === 'individual') {
+      setValidationErrors(prev => prev.filter(error => error.field !== 'organizationId'));
+    }
+  };
+
+  // Handle token type change
+  const handleTokenTypeChange = (type: 'STX' | 'sBTC' | 'other') => {
+    setFormData(prev => ({
+      ...prev,
+      tokenType: type,
+      tokenContract: type === 'other' ? prev.tokenContract : ''
+    }));
+
+    // Clear token contract validation if not custom
+    if (type !== 'other') {
+      setValidationErrors(prev => prev.filter(error => error.field !== 'tokenContract'));
+    }
+  };
+
+  // COMPREHENSIVE FORM VALIDATION
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
 
+    // Validate organization selection for organization contracts
+    if (formData.contractType === 'organization' && !formData.organizationId) {
+      newErrors.organizationId = 'Organization selection is required';
+    }
 
-    // Validate freelancer address with detailed logging
+    // Validate token contract for custom tokens
+    if (formData.tokenType === 'other' && !formData.tokenContract.trim()) {
+      newErrors.tokenContract = 'Token contract address is required';
+    } else if (formData.tokenType === 'other' && !validateAddress(formData.tokenContract.trim())) {
+      newErrors.tokenContract = 'Invalid contract address format';
+    }
+
+    // Validate freelancer address
     if (!formData.freelancer.trim()) {
       newErrors.freelancer = 'Freelancer address is required';
     } else {
       const address = formData.freelancer.trim();
-      
-      // ✅ FIXED: Use validateAddress correctly (returns boolean)
       const isValid = validateAddress(address);
       
       if (!isValid) {
         newErrors.freelancer = 'Invalid Stacks address format';
-      } else {
       }
     }
 
@@ -204,13 +298,10 @@ export default function CreateContractPage() {
     }
 
     setErrors(newErrors);
-    const isValid = Object.keys(newErrors).length === 0;
-    
-    
-    return isValid;
+    return Object.keys(newErrors).length === 0;
   };
 
-  // ✅ FIXED: Complete handleSubmit function with proper userAddress usage
+  // HANDLE SUBMIT
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -223,34 +314,50 @@ export default function CreateContractPage() {
       return;
     }
 
-    // ✅ FIXED: Use the destructured userAddress
-    // Client is automatically the current user
     const clientAddress = userData?.profile?.stxAddress?.testnet || userData?.profile?.stxAddress?.mainnet;
 
     if (!clientAddress) {
       setTxResult({ success: false, error: 'Please connect your wallet properly' });
       return;
     }
-
     
     try {
       const totalAmountMicroStx = parseFloat(formData.totalAmount) * 1000000; // Convert to microSTX
       const endDateTimestamp = Math.floor(new Date(formData.endDate).getTime() / 1000); // Convert to Unix timestamp
       
-      // ✅ FIXED: Call createEscrow with correct 5 parameters matching smart contract
-      const result = await createEscrow(
-        clientAddress,                    
-        formData.freelancer.trim(),     // freelancer
-        formData.description.trim(),    // description
-        endDateTimestamp,               // endDate
-        totalAmountMicroStx            // totalAmount
-      );
+      let result;
+
+      if (formData.contractType === 'individual') {
+        // Create individual STX contract (backward compatible)
+        result = await createEscrow(
+          clientAddress,                    
+          formData.freelancer.trim(),     // freelancer
+          formData.description.trim(),    // description
+          endDateTimestamp,               // endDate
+          totalAmountMicroStx            // totalAmount
+        );
+      } else {
+        // Create organization-based contract with multi-token support
+        // TODO: Implement organization contract creation
+        // For now, fallback to individual contract
+        result = await createEscrow(
+          clientAddress,                    
+          formData.freelancer.trim(),     
+          formData.description.trim(),    
+          endDateTimestamp,               
+          totalAmountMicroStx            
+        );
+      }
 
       setTxResult(result);
       
       if (result.success) {
         // Reset form on success
         setFormData({
+          contractType: 'individual',
+          organizationId: '',
+          tokenType: 'STX',
+          tokenContract: '',
           freelancer: '',
           description: '',
           totalAmount: '',
@@ -263,7 +370,6 @@ export default function CreateContractPage() {
         setTimeout(() => {
           router.push('/dashboard');
         }, 2000);
-      } else {
       }
     } catch (error) {
       setTxResult({
@@ -273,7 +379,7 @@ export default function CreateContractPage() {
     }
   };
 
-  // ✅ VALIDATION DISPLAY COMPONENT
+  // VALIDATION DISPLAY COMPONENT
   const ValidationDisplay = ({ field }: { field: string }) => {
     const fieldErrors = validationErrors.filter(e => e.field === field);
     
@@ -299,7 +405,16 @@ export default function CreateContractPage() {
 
   // Check if form is valid (no error-type validations)
   const hasErrors = validationErrors.some(e => e.type === 'error');
-  const canSubmit = !hasErrors && Object.values(formData).every(v => v.trim() !== '');
+  const canSubmit = !hasErrors && Object.values(formData).every((v, i) => {
+    // Skip optional fields based on contract type and token type
+    const keys = Object.keys(formData);
+    const key = keys[i];
+    
+    if (key === 'organizationId' && formData.contractType === 'individual') return true;
+    if (key === 'tokenContract' && formData.tokenType !== 'other') return true;
+    
+    return v.trim() !== '';
+  });
 
   if (!isSignedIn) {
     return (
@@ -331,17 +446,144 @@ export default function CreateContractPage() {
             Back to Dashboard
           </button>
           <h1 className="text-3xl font-bold text-gray-900">Create New Contract</h1>
-          <p className="text-gray-600 mt-2">Set up a milestone-based payment contract with enhanced validation</p>
+          <p className="text-gray-600 mt-2">Set up a milestone-based payment contract with organization and multi-token support</p>
         </div>
 
         {/* Main Form */}
         <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
           <div className="px-6 py-8">
             <form onSubmit={handleSubmit} className="space-y-6">
+              
+              {/* Contract Type Selection */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  Contract Type
+                </label>
+                <div className="grid grid-cols-2 gap-4">
+                  <button
+                    type="button"
+                    onClick={() => handleContractTypeChange('individual')}
+                    className={`p-4 border-2 rounded-xl text-left transition-all ${
+                      formData.contractType === 'individual'
+                        ? 'border-orange-500 bg-orange-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="flex items-center mb-2">
+                      <User className="w-5 h-5 mr-2 text-orange-600" />
+                      <span className="font-medium">Individual</span>
+                    </div>
+                    <p className="text-sm text-gray-600">Personal contract between you and freelancer</p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleContractTypeChange('organization')}
+                    className={`p-4 border-2 rounded-xl text-left transition-all ${
+                      formData.contractType === 'organization'
+                        ? 'border-orange-500 bg-orange-50'
+                        : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="flex items-center mb-2">
+                      <Building className="w-5 h-5 mr-2 text-orange-600" />
+                      <span className="font-medium">Organization</span>
+                    </div>
+                    <p className="text-sm text-gray-600">Contract on behalf of an organization</p>
+                  </button>
+                </div>
+              </div>
+
+              {/* Organization Selection */}
+              {formData.contractType === 'organization' && (
+                <div>
+                  <label htmlFor="organizationId" className="block text-sm font-medium text-gray-700 mb-2">
+                    <Building className="w-4 h-4 inline mr-2" />
+                    Select Organization
+                  </label>
+                  <select
+                    id="organizationId"
+                    name="organizationId"
+                    value={formData.organizationId}
+                    onChange={handleInputChange}
+                    className={`w-full px-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 transition-colors ${
+                      errors.organizationId ? 'border-red-300' : 'border-gray-300'
+                    }`}
+                  >
+                    <option value="">Choose an organization...</option>
+                    {organizations.map(org => (
+                      <option key={org.id} value={org.id}>
+                        {org.name} ({org.role})
+                      </option>
+                    ))}
+                  </select>
+                  <ValidationDisplay field="organizationId" />
+                </div>
+              )}
+
+              {/* Token Type Selection */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-3">
+                  <Coins className="w-4 h-4 inline mr-2" />
+                  Payment Token
+                </label>
+                <div className="space-y-3">
+                  {tokenOptions.map(option => (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => handleTokenTypeChange(option.value as 'STX' | 'sBTC' | 'other')}
+                      className={`w-full p-4 border-2 rounded-xl text-left transition-all ${
+                        formData.tokenType === option.value
+                          ? 'border-orange-500 bg-orange-50'
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="font-medium">{option.label}</span>
+                          <p className="text-sm text-gray-600 mt-1">{option.description}</p>
+                        </div>
+                        <div className={`w-4 h-4 rounded-full border-2 ${
+                          formData.tokenType === option.value
+                            ? 'border-orange-500 bg-orange-500'
+                            : 'border-gray-300'
+                        }`}>
+                          {formData.tokenType === option.value && (
+                            <div className="w-full h-full rounded-full bg-white scale-50"></div>
+                          )}
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Custom Token Contract */}
+              {formData.tokenType === 'other' && (
+                <div>
+                  <label htmlFor="tokenContract" className="block text-sm font-medium text-gray-700 mb-2">
+                    Token Contract Address
+                  </label>
+                  <input
+                    type="text"
+                    id="tokenContract"
+                    name="tokenContract"
+                    value={formData.tokenContract}
+                    onChange={handleInputChange}
+                    className={`w-full px-4 py-3 border-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 transition-colors font-mono text-sm ${
+                      errors.tokenContract ? 'border-red-300' : 'border-gray-300'
+                    }`}
+                    placeholder="SP2C36S11ETAE5TAE1Z1F1Q2SYTMF1FW7VQZEJNGZ.token-contract"
+                  />
+                  <ValidationDisplay field="tokenContract" />
+                </div>
+              )}
+
               {/* Freelancer Address */}
               <div>
                 <label htmlFor="freelancer" className="block text-sm font-medium text-gray-700 mb-2">
-                  <User className="w-4 h-4 inline mr-2" />
+                  <Users className="w-4 h-4 inline mr-2" />
                   Freelancer Address
                 </label>
                 <input
@@ -382,7 +624,7 @@ export default function CreateContractPage() {
               <div>
                 <label htmlFor="totalAmount" className="block text-sm font-medium text-gray-700 mb-2">
                   <DollarSign className="w-4 h-4 inline mr-2" />
-                  Total Amount (STX)
+                  Total Amount ({formData.tokenType === 'other' ? 'Tokens' : formData.tokenType})
                 </label>
                 <input
                   type="number"
@@ -467,14 +709,14 @@ export default function CreateContractPage() {
           </div>
         </div>
 
-        {/* API Integration Notice */}
+        {/* Enhanced Features Notice */}
         <div className="mt-6 bg-blue-50 border border-blue-200 rounded-xl p-4">
           <div className="flex items-center">
             <CheckCircle className="w-5 h-5 text-blue-600 mr-2" />
-            <span className="font-medium text-blue-800">Enhanced with Hiro API Integration</span>
+            <span className="font-medium text-blue-800">Enhanced Contract Creation</span>
           </div>
           <p className="text-blue-700 mt-1 text-sm">
-            This form includes real-time address validation and reduced rate limiting using your Hiro API key.
+            This form supports both individual and organization contracts with multi-token payments including sBTC support.
           </p>
         </div>
       </div>

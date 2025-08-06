@@ -4,7 +4,7 @@ import { useStacks } from '@/hooks/useStacks';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { formatAddress } from '@/lib/utils';
-import { LogOut, Home } from 'lucide-react';
+import { LogOut, Home, Building } from 'lucide-react';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -50,8 +50,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       <nav className="bg-white shadow-sm border-b sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            {/* Logo and Home Link */}
-            <div className="flex items-center space-x-4">
+            {/* Logo and Navigation */}
+            <div className="flex items-center space-x-6">
               <button
                 onClick={() => router.push('/')}
                 className="flex items-center space-x-2 text-orange-600 hover:text-orange-700 transition-colors"
@@ -59,6 +59,22 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                 <Home className="w-5 h-5" />
                 <span className="text-xl font-bold">WorkShield</span>
               </button>
+              
+              <nav className="hidden md:flex items-center space-x-4">
+                <button
+                  onClick={() => router.push('/dashboard')}
+                  className="flex items-center space-x-1 px-3 py-2 text-sm text-gray-700 hover:text-orange-600 hover:bg-gray-50 rounded-lg transition-colors"
+                >
+                  Dashboard
+                </button>
+                <button
+                  onClick={() => router.push('/dashboard/organizations')}
+                  className="flex items-center space-x-1 px-3 py-2 text-sm text-gray-700 hover:text-orange-600 hover:bg-gray-50 rounded-lg transition-colors"
+                >
+                  <Building className="w-4 h-4" />
+                  Organizations
+                </button>
+              </nav>
             </div>
 
             {/* User Info and Actions */}
