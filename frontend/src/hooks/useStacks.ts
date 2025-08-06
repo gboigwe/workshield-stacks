@@ -47,6 +47,7 @@ export const useStacks = () => {
     submitMilestone,
     approveMilestone,
     rejectMilestone,
+    releaseRemainingBalance,
     debugContractSystem,
   } = useContractActions(isSignedIn, userData, userAddress);
 
@@ -77,6 +78,7 @@ export const useStacks = () => {
       submitMilestone: () => Promise.resolve({ success: false, error: 'Not mounted' }),
       approveMilestone: () => Promise.resolve({ success: false, error: 'Not mounted' }),
       rejectMilestone: () => Promise.resolve({ success: false, error: 'Not mounted' }),
+      releaseRemainingBalance: () => Promise.resolve({ success: false, error: 'Not mounted' }),
       enableRealTimeUpdates: () => {},
       isPollingEnabled: false,
       validateAddress: () => false,
@@ -122,6 +124,7 @@ export const useStacks = () => {
     submitMilestone,
     approveMilestone,
     rejectMilestone,
+    releaseRemainingBalance,
     
     // Real-time Controls
     enableRealTimeUpdates,

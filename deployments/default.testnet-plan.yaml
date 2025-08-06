@@ -9,9 +9,9 @@ plan:
     - id: 0
       transactions:
         - contract-publish:
-            contract-name: workshield-escrow-v2
+            contract-name: workshield-test-v3
             expected-sender: ST3A5HQKQM3T3BV1MCZ45S6Q729V8355BQ0W0NP2V
-            cost: 100000
+            cost: 196540
             path: contracts/workshield-escrow.clar
             anchor-block-only: true
             clarity-version: 3

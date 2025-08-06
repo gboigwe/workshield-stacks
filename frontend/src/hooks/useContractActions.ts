@@ -374,6 +374,57 @@ export const useContractActions = (
     }
   }, [isSignedIn, userData, userAddress, queryClient]);
 
+  // Release remaining balance (emergency function)
+  const releaseRemainingBalance = useCallback(async (
+    contractId: number,
+    milestoneIndex: number
+  ): Promise<TransactionResponse> => {
+    if (!isSignedIn || !userData) {
+      return { success: false, error: 'Please connect your wallet first' };
+    }
+
+    try {
+      setTransactionInProgress(true);
+      console.log(`🚨 EMERGENCY: Releasing remaining balance for contract ${contractId}, milestone ${milestoneIndex}...`);
+
+      await openContractCall({
+        network,
+        contractAddress: escrowContract.address,
+        contractName: escrowContract.name,
+        functionName: 'release-remaining-balance',
+        functionArgs: [
+          uintCV(contractId),
+          uintCV(milestoneIndex)
+        ],
+        postConditionMode: PostConditionMode.Allow,
+        onFinish: (data) => {
+          console.log('✅ Emergency release completed:', data.txId);
+          
+          setTimeout(() => {
+            queryClient.invalidateQueries({ queryKey: QUERY_KEYS.contracts(userAddress!) });
+            queryClient.invalidateQueries({ queryKey: QUERY_KEYS.contractDetails(contractId) });
+            queryClient.invalidateQueries({ queryKey: QUERY_KEYS.milestones(contractId) });
+            contractCache.delete(`contract-${contractId}`);
+            contractCache.delete(`milestones-${contractId}`);
+          }, 2000);
+          
+          setTransactionInProgress(false);
+        },
+        onCancel: () => {
+          console.log('❌ Emergency release cancelled');
+          setTransactionInProgress(false);
+        },
+      });
+
+      return { success: true, txId: 'pending' };
+    } catch (error: any) {
+      console.error('❌ Error releasing remaining balance:', error);
+      setTransactionInProgress(false);
+      const errorMessage = error?.message || 'Unknown error';
+      return { success: false, error: errorMessage };
+    }
+  }, [isSignedIn, userData, userAddress, queryClient]);
+
   return {
     // State
     transactionInProgress,
@@ -384,6 +435,7 @@ export const useContractActions = (
     submitMilestone,
     approveMilestone,
     rejectMilestone,
+    releaseRemainingBalance,
     debugContractSystem,
   };
 };

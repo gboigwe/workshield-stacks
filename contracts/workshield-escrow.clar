@@ -1,5 +1,18 @@
-;; WorkShield Core Escrow Contract
-;; Handles contract creation, milestone management, and escrow logic
+;; WorkShield Enhanced Escrow Contract
+;; Handles organizations, contract creation, milestone management, and multi-token escrow logic
+
+;; SIP-010 trait definition for multi-token support
+(define-trait sip010-trait
+  (
+    (transfer (uint principal principal (optional (buff 34))) (response bool uint))
+    (get-name () (response (string-ascii 32) uint))
+    (get-symbol () (response (string-ascii 32) uint))
+    (get-decimals () (response uint uint))
+    (get-balance (principal) (response uint uint))
+    (get-total-supply () (response uint uint))
+    (get-token-uri () (response (optional (string-utf8 256)) uint))
+  )
+)
 
 ;; Constants
 (define-constant contract-owner tx-sender)
@@ -12,6 +25,10 @@
 (define-constant err-deadline-exceeded (err u106))
 (define-constant err-milestone-amount-mismatch (err u107))
 (define-constant err-invalid-time-parameters (err u108))
+(define-constant err-organization-not-found (err u109))
+(define-constant err-not-organization-member (err u110))
+(define-constant err-organization-already-exists (err u111))
+(define-constant err-invalid-token-contract (err u112))
 
 ;; Contract Status Constants
 (define-constant status-active u0)
@@ -25,15 +42,46 @@
 (define-constant milestone-approved u2)
 (define-constant milestone-rejected u3)
 
+;; Organization Role Constants
+(define-constant role-owner "owner")
+(define-constant role-admin "admin")
+(define-constant role-member "member")
+
 ;; Data Variables
 (define-data-var next-contract-id uint u1)
+(define-data-var next-organization-id uint u1)
 
 ;; Data Maps
+
+;; Organization Management Maps
+(define-map organizations
+  uint
+  {
+    owner: principal,
+    name: (string-ascii 100),
+    description: (string-utf8 500),
+    active: bool,
+    created-at: uint
+  }
+)
+
+(define-map organization-members
+  {org-id: uint, member: principal}
+  {
+    role: (string-ascii 20),
+    added-at: uint,
+    added-by: principal
+  }
+)
+
+;; Enhanced Contract Maps with Organization Support
 (define-map contracts
   uint
   {
+    org-id: (optional uint),
     client: principal,
     freelancer: principal,
+    token-contract: principal,
     total-amount: uint,
     remaining-balance: uint,
     status: uint,
@@ -67,7 +115,7 @@
   }
 )
 
-;; Private Functions
+;; Private Functions?
 (define-private (is-client (contract-id uint) (user principal))
   (match (map-get? contracts contract-id)
     contract-data (is-eq (get client contract-data) user)
@@ -99,9 +147,174 @@
   u0 ;; Simplified for now - would need proper iteration
 )
 
+;; Organization Helper Functions
+(define-private (is-organization-owner (org-id uint) (user principal))
+  (match (map-get? organizations org-id)
+    org-data (is-eq (get owner org-data) user)
+    false
+  )
+)
+
+(define-private (is-organization-member (org-id uint) (user principal))
+  (is-some (map-get? organization-members {org-id: org-id, member: user}))
+)
+
+(define-private (has-organization-role (org-id uint) (user principal) (required-role (string-ascii 20)))
+  (match (map-get? organization-members {org-id: org-id, member: user})
+    member-data (or 
+      (is-eq (get role member-data) required-role)
+      (is-eq (get role member-data) role-owner))
+    false
+  )
+)
+
 ;; Public Functions
 
-;; Create a new escrow contract
+;; ================================================================================
+;; ORGANIZATION MANAGEMENT FUNCTIONS
+;; ================================================================================
+
+;; Create a new organization
+(define-public (create-organization (name (string-ascii 100)) (description (string-utf8 500)))
+  (let ((org-id (var-get next-organization-id)))
+    (begin
+      ;; Create the organization
+      (map-set organizations org-id {
+        owner: tx-sender,
+        name: name,
+        description: description,
+        active: true,
+        created-at: stacks-block-height
+      })
+      
+      ;; Add creator as owner member
+      (map-set organization-members 
+        {org-id: org-id, member: tx-sender}
+        {
+          role: role-owner,
+          added-at: stacks-block-height,
+          added-by: tx-sender
+        }
+      )
+      
+      ;; Increment organization ID
+      (var-set next-organization-id (+ org-id u1))
+      
+      ;; Print event
+      (print {
+        action: "organization-created",
+        org-id: org-id,
+        owner: tx-sender,
+        name: name
+      })
+      
+      (ok org-id)
+    )
+  )
+)
+
+;; Add member to organization
+(define-public (add-organization-member (org-id uint) (member principal) (role (string-ascii 20)))
+  (begin
+    ;; Verify organization exists
+    (asserts! (is-some (map-get? organizations org-id)) err-organization-not-found)
+    
+    ;; Verify sender has permission (owner or admin)
+    (asserts! (or 
+      (is-organization-owner org-id tx-sender)
+      (has-organization-role org-id tx-sender role-admin)
+    ) err-not-authorized)
+    
+    ;; Verify valid role
+    (asserts! (or 
+      (is-eq role role-admin)
+      (is-eq role role-member)
+    ) err-not-authorized)
+    
+    ;; Add member
+    (map-set organization-members 
+      {org-id: org-id, member: member}
+      {
+        role: role,
+        added-at: stacks-block-height,
+        added-by: tx-sender
+      }
+    )
+    
+    ;; Print event
+    (print {
+      action: "member-added",
+      org-id: org-id,
+      member: member,
+      role: role,
+      added-by: tx-sender
+    })
+    
+    (ok true)
+  )
+)
+
+;; Remove member from organization
+(define-public (remove-organization-member (org-id uint) (member principal))
+  (begin
+    ;; Verify organization exists
+    (asserts! (is-some (map-get? organizations org-id)) err-organization-not-found)
+    
+    ;; Verify sender has permission (owner or admin)
+    (asserts! (or 
+      (is-organization-owner org-id tx-sender)
+      (has-organization-role org-id tx-sender role-admin)
+    ) err-not-authorized)
+    
+    ;; Cannot remove organization owner
+    (asserts! (not (is-organization-owner org-id member)) err-not-authorized)
+    
+    ;; Remove member
+    (map-delete organization-members {org-id: org-id, member: member})
+    
+    ;; Print event
+    (print {
+      action: "member-removed",
+      org-id: org-id,
+      member: member,
+      removed-by: tx-sender
+    })
+    
+    (ok true)
+  )
+)
+
+;; Update organization details
+(define-public (update-organization (org-id uint) (name (string-ascii 100)) (description (string-utf8 500)))
+  (begin
+    ;; Verify organization exists and sender is owner
+    (asserts! (is-organization-owner org-id tx-sender) err-not-authorized)
+    
+    ;; Update organization
+    (map-set organizations org-id {
+      owner: tx-sender,
+      name: name,
+      description: description,
+      active: true,
+      created-at: (unwrap-panic (get created-at (map-get? organizations org-id)))
+    })
+    
+    ;; Print event
+    (print {
+      action: "organization-updated",
+      org-id: org-id,
+      name: name
+    })
+    
+    (ok true)
+  )
+)
+
+;; ================================================================================
+;; ENHANCED ESCROW FUNCTIONS WITH ORGANIZATION & MULTI-TOKEN SUPPORT
+;; ================================================================================
+
+;; Create individual escrow contract (STX-only, backward compatible)
 (define-public (create-escrow 
     (client principal)
     (freelancer principal)
@@ -118,14 +331,16 @@
     (asserts! (> total-amount u0) err-invalid-amount)
     (asserts! (not (is-eq client freelancer)) err-not-authorized)
     
-    ;; Transfer payment to contract
+    ;; Transfer STX payment to contract
     (try! (stx-transfer? total-amount tx-sender (as-contract tx-sender)))
     
-    ;; Create contract record
+    ;; Create contract record (no organization, STX token)
     (map-set contracts contract-id
       {
+        org-id: none,
         client: client,
         freelancer: freelancer,
+        token-contract: 'SP000000000000000000002Q6VF78, ;; STX pseudo-address
         total-amount: total-amount,
         remaining-balance: total-amount,
         status: status-active,
@@ -141,10 +356,126 @@
     ;; Increment contract ID
     (var-set next-contract-id (+ contract-id u1))
     
+    ;; Print event
+    (print {
+      action: "contract-created",
+      contract-id: contract-id,
+      client: client,
+      freelancer: freelancer,
+      amount: total-amount,
+      token: "STX"
+    })
+    
     ;; Return contract ID
     (ok contract-id)
   )
 )
+
+;; Create organization-based escrow contract with multi-token support
+(define-public (create-organization-contract
+    (org-id uint)
+    (freelancer principal)
+    (token-contract <sip010-trait>)
+    (description (string-utf8 500))
+    (end-date uint)
+    (total-amount uint))
+  (let 
+    (
+      (contract-id (var-get next-contract-id))
+      (current-time stacks-block-height)
+      (token-principal (contract-of token-contract))
+    )
+    ;; Validations
+    (asserts! (> end-date current-time) err-invalid-time-parameters)
+    (asserts! (> total-amount u0) err-invalid-amount)
+    (asserts! (not (is-eq tx-sender freelancer)) err-not-authorized)
+    
+    ;; Verify organization exists and sender is member
+    (asserts! (is-some (map-get? organizations org-id)) err-organization-not-found)
+    (asserts! (is-organization-member org-id tx-sender) err-not-organization-member)
+    
+    ;; Transfer token payment to contract
+    (try! (contract-call? token-contract transfer 
+      total-amount 
+      tx-sender 
+      (as-contract tx-sender) 
+      none))
+    
+    ;; Create contract record
+    (map-set contracts contract-id
+      {
+        org-id: (some org-id),
+        client: tx-sender,
+        freelancer: freelancer,
+        token-contract: token-principal,
+        total-amount: total-amount,
+        remaining-balance: total-amount,
+        status: status-active,
+        created-at: current-time,
+        end-date: end-date,
+        description: description
+      }
+    )
+    
+    ;; Initialize milestone counter
+    (map-set milestone-counters contract-id u0)
+    
+    ;; Increment contract ID
+    (var-set next-contract-id (+ contract-id u1))
+    
+    ;; Print event
+    (print {
+      action: "organization-contract-created",
+      contract-id: contract-id,
+      org-id: org-id,
+      client: tx-sender,
+      freelancer: freelancer,
+      amount: total-amount,
+      token: token-principal
+    })
+    
+    ;; Return contract ID
+    (ok contract-id)
+  )
+)
+
+;; ================================================================================
+;; READ-ONLY ORGANIZATION FUNCTIONS
+;; ================================================================================
+
+;; Get organization details
+(define-read-only (get-organization (org-id uint))
+  (map-get? organizations org-id)
+)
+
+;; Get organization member details
+(define-read-only (get-organization-member (org-id uint) (member principal))
+  (map-get? organization-members {org-id: org-id, member: member})
+)
+
+;; Check if user is organization member
+(define-read-only (is-organization-member-read (org-id uint) (member principal))
+  (is-organization-member org-id member)
+)
+
+;; Check if user is organization owner
+(define-read-only (is-organization-owner-read (org-id uint) (member principal))
+  (is-organization-owner org-id member)
+)
+
+;; Get next organization ID
+(define-read-only (get-next-organization-id)
+  (var-get next-organization-id)
+)
+
+;; Enhanced contract getter with token information
+(define-read-only (get-contract-details (contract-id uint))
+  (map-get? contracts contract-id)
+)
+
+;; ================================================================================
+;; EXISTING ESCROW FUNCTIONS (ENHANCED FOR MULTI-TOKEN)
+;; ================================================================================
 
 ;; Add a milestone to an existing contract
 (define-public (add-milestone
@@ -229,7 +560,11 @@
     (asserts! (is-contract-active contract-id) err-invalid-state)
     (asserts! (is-eq (get status milestone-data) milestone-submitted) err-invalid-state)
     
-    ;; Release payment to freelancer
+    ;; Ensure contract has sufficient balance
+    (asserts! (>= (get remaining-balance contract-data) payment-amount) err-insufficient-funds)
+    
+    ;; Release payment to freelancer from contract balance
+    ;; Client pays transaction fees from their own wallet (tx-sender pays the fee)
     (try! (as-contract (stx-transfer? payment-amount tx-sender (get freelancer contract-data))))
     
     ;; Update milestone status
@@ -237,7 +572,7 @@
       (merge milestone-data {status: milestone-approved})
     )
     
-    ;; Update contract remaining balance
+    ;; Update contract remaining balance (only deduct the milestone amount, not fees)
     (map-set contracts contract-id
       (merge contract-data {
         remaining-balance: (- (get remaining-balance contract-data) payment-amount)
@@ -312,6 +647,52 @@
 ;; Get milestone details
 (define-read-only (get-milestone (contract-id uint) (milestone-id uint))
   (map-get? milestones {contract-id: contract-id, milestone-id: milestone-id})
+)
+
+;; Emergency function to release remaining balance when milestone can't be approved
+;; Can be called when remaining balance is less than milestone amount
+(define-public (release-remaining-balance
+    (contract-id uint)
+    (milestone-id uint))
+  (let 
+    (
+      (milestone-key {contract-id: contract-id, milestone-id: milestone-id})
+      (milestone-data (unwrap! (map-get? milestones milestone-key) err-invalid-milestone))
+      (contract-data (unwrap! (map-get? contracts contract-id) err-invalid-state))
+      (remaining-balance (get remaining-balance contract-data))
+      (milestone-amount (get amount milestone-data))
+    )
+    ;; Validations
+    (asserts! (is-client contract-id tx-sender) err-not-authorized)
+    (asserts! (is-contract-active contract-id) err-invalid-state)
+    (asserts! (is-eq (get status milestone-data) milestone-submitted) err-invalid-state)
+    ;; Only allow if remaining balance is less than milestone amount (emergency situation)
+    (asserts! (< remaining-balance milestone-amount) err-invalid-state)
+    ;; Ensure there's something to release
+    (asserts! (> remaining-balance u0) err-insufficient-funds)
+    
+    ;; Release whatever balance remains to freelancer
+    ;; Client pays transaction fees from their wallet
+    (try! (as-contract (stx-transfer? remaining-balance tx-sender (get freelancer contract-data))))
+    
+    ;; Update milestone status to approved (partial)
+    (map-set milestones milestone-key
+      (merge milestone-data {
+        status: milestone-approved,
+        submission-note: (some u"[PARTIAL RELEASE - EMERGENCY]")
+      })
+    )
+    
+    ;; Update contract remaining balance to zero
+    (map-set contracts contract-id
+      (merge contract-data {remaining-balance: u0})
+    )
+    
+    ;; Check if contract is completed
+    (try! (check-contract-completion contract-id))
+    
+    (ok remaining-balance)
+  )
 )
 
 ;; Get milestone count for a contract

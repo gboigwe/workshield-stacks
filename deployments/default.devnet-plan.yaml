@@ -16,9 +16,9 @@ plan:
             anchor-block-only: true
             clarity-version: 3
         - contract-publish:
-            contract-name: workshield-escrow
+            contract-name: workshield-escrow-v2
             expected-sender: ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM
-            cost: 97550
+            cost: 196540
             path: contracts/workshield-escrow.clar
             anchor-block-only: true
             clarity-version: 3
