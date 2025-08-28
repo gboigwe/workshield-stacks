@@ -5,20 +5,30 @@ authors = []
 telemetry = true
 cache_dir = './.cache'
 requirements = []
+[contracts.workshield-dao]
+path = 'contracts/workshield-dao.clar'
+clarity_version = 3
+epoch = 'latest'
+
 [contracts.workshield-dispute]
 path = 'contracts/workshield-dispute.clar'
 clarity_version = 3
-epoch = 3.1
+epoch = '3.1'
 
 [contracts.workshield-escrow-v2]
 path = 'contracts/workshield-escrow.clar'
 clarity_version = 3
-epoch = 3.1
+epoch = '3.1'
+
+[contracts.workshield-membership]
+path = 'contracts/workshield-membership.clar'
+clarity_version = 3
+epoch = '3.1'
 
 [contracts.workshield-payments]
 path = 'contracts/workshield-payments.clar'
 clarity_version = 3
-epoch = 3.1
+epoch = '3.1'
 [repl.analysis]
 passes = ['check_checker']
 
