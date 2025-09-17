@@ -4,34 +4,27 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useStacks } from '@/hooks/useStacks';
+import { usePagination } from '@/hooks/usePagination';
+// import { LoadMoreButton } from '@/components/ui/LoadMoreButton';
 import { 
   Calendar, 
   DollarSign, 
   User, 
   Briefcase, 
-  Clock, 
-  CheckCircle, 
-  AlertTriangle,
+  CheckCircle,
   Plus,
   Eye,
-  TrendingUp,
   FileText,
   Activity,
-  Users
+  Building
 } from 'lucide-react';
 import { 
   Contract, 
-  Milestone, 
   MilestoneStatus, 
   ContractStatus, 
   formatSTX, 
   formatDate, 
-  UserRole,
-  // formatAmount,
-  // getContractStatusText,
-  // getContractStatusColor,
-  // getMilestoneStatusText,
-  // getMilestoneStatusColor
+  UserRole
 } from '@/types';
 
 interface DashboardStats {
@@ -47,13 +40,10 @@ interface DashboardStats {
 export default function EnhancedDashboardPage() {
   const router = useRouter();
   const { 
-    userData, 
     isSignedIn, 
-    loading, 
-    connectWallet, 
-    clientContracts, 
-    freelancerContracts,
-    transactionInProgress,
+    loading,
+    clientContracts: allClientContracts,
+    freelancerContracts: allFreelancerContracts,
     refreshContracts,
     debugContractSystem,
   } = useStacks();
@@ -62,8 +52,16 @@ export default function EnhancedDashboardPage() {
   const [mounted, setMounted] = useState(false);
   const [activeTab, setActiveTab] = useState<UserRole>(UserRole.CLIENT);
   const [contractsLoading, setContractsLoading] = useState(true);
-  
-  const userAddress = userData?.profile?.stxAddress?.testnet || userData?.profile?.stxAddress?.mainnet;
+
+  // Pagination for client contracts (4 per page - 2x2 grid)
+  const { pagination: clientPagination, actions: clientActions } = usePagination(
+    { limit: 4, initialOffset: 0 }
+  );
+
+  // Pagination for freelancer contracts (4 per page - 2x2 grid)  
+  const { pagination: freelancerPagination, actions: freelancerActions } = usePagination(
+    { limit: 4, initialOffset: 0 }
+  );
   
   useEffect(() => {
     setMounted(true);
@@ -75,15 +73,32 @@ export default function EnhancedDashboardPage() {
     }
   }, [isSignedIn, loading, router, mounted]);
 
+  // Simple pagination - slice the loaded contracts
+  const clientContracts = allClientContracts.slice(0, clientPagination.offset + clientPagination.limit);
+  const freelancerContracts = allFreelancerContracts.slice(0, freelancerPagination.offset + freelancerPagination.limit);
+
+  // Calculate hasMore without using useEffect to avoid infinite renders
+  const clientHasMore = allClientContracts.length > clientContracts.length;
+  const freelancerHasMore = allFreelancerContracts.length > freelancerContracts.length;
+
+  // Load more handlers
+  const handleLoadMoreClient = async () => {
+    await clientActions.loadMore();
+  };
+
+  const handleLoadMoreFreelancer = async () => {
+    await freelancerActions.loadMore();
+  };
+
   // Auto-determine primary role and set tab
   useEffect(() => {
-    if (clientContracts.length > 0 && freelancerContracts.length === 0) {
+    if (allClientContracts.length > 0 && allFreelancerContracts.length === 0) {
       setActiveTab(UserRole.CLIENT);
-    } else if (freelancerContracts.length > 0 && clientContracts.length === 0) {
+    } else if (allFreelancerContracts.length > 0 && allClientContracts.length === 0) {
       setActiveTab(UserRole.FREELANCER);
     }
     setContractsLoading(false);
-  }, [clientContracts, freelancerContracts]);
+  }, [allClientContracts, allFreelancerContracts]);
 
   // Calculate dashboard statistics
   const calculateStats = (contracts: Contract[], role: UserRole): DashboardStats => {
@@ -143,7 +158,7 @@ export default function EnhancedDashboardPage() {
   const StatCard = ({ title, value, icon: Icon, color, subtext }: {
     title: string;
     value: string | number;
-    icon: any;
+    icon: React.ComponentType<{ className?: string }>;
     color: string;
     subtext?: string;
   }) => (
@@ -282,13 +297,33 @@ export default function EnhancedDashboardPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Network Status Warning */}
+        {(clientContracts.length === 0 && freelancerContracts.length === 0) && (
+          <div className="mb-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+            <div className="flex items-start gap-3">
+              <div className="w-5 h-5 text-yellow-600 mt-0.5">
+                ⚠️
+              </div>
+              <div className="flex-1">
+                <h3 className="text-sm font-medium text-yellow-800">Network Connection Issues</h3>
+                <p className="text-sm text-yellow-700 mt-1">
+                  Unable to load contract data. This might be due to network restrictions.
+                </p>
+                <p className="text-xs text-yellow-600 mt-2">
+                  💡 Try: VPN connection, different network, or refresh the page
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <div className="mb-8">
           <div className="flex justify-between items-center">
             <div>
               <h1 className="text-3xl font-bold text-gray-900">WorkShield Dashboard</h1>
               <p className="text-gray-600 mt-1">
-                Welcome back! Here's your contract overview.
+                Welcome back! Here&apos;s your contract overview.
               </p>
             </div>
             
@@ -304,6 +339,8 @@ export default function EnhancedDashboardPage() {
               <button
                 onClick={async () => {
                   setContractsLoading(true);
+                  clientActions.reset();
+                  freelancerActions.reset();
                   await refreshContracts();
                   setContractsLoading(false);
                 }}
@@ -311,6 +348,14 @@ export default function EnhancedDashboardPage() {
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
               >
                 {contractsLoading ? 'Refreshing...' : 'Refresh Contracts'}
+              </button>
+              
+              <button
+                onClick={() => router.push('/dashboard/organizations')}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
+              >
+                <Building className="w-4 h-4" />
+                Organizations
               </button>
               
               <button
@@ -398,7 +443,7 @@ export default function EnhancedDashboardPage() {
             </div>
           </div>
 
-          {contractsLoading ? (
+          {loading ? (
             <div className="text-center py-12">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600 mx-auto mb-4"></div>
               <p className="text-gray-600">Loading contracts...</p>
@@ -428,16 +473,34 @@ export default function EnhancedDashboardPage() {
               )}
             </div>
           ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <AnimatePresence>
-                {currentContracts.map((contract) => (
-                  <ContractCard 
-                    key={contract.id} 
-                    contract={contract} 
-                    role={activeTab} 
-                  />
-                ))}
-              </AnimatePresence>
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <AnimatePresence>
+                  {currentContracts.map((contract) => (
+                    <ContractCard 
+                      key={contract.id} 
+                      contract={contract} 
+                      role={activeTab} 
+                    />
+                  ))}
+                </AnimatePresence>
+              </div>
+              
+              {/* Load More Button */}
+              {(activeTab === UserRole.CLIENT ? clientHasMore : freelancerHasMore) && (
+                <div className="mt-6 flex justify-center">
+                  <button
+                    onClick={activeTab === UserRole.CLIENT ? handleLoadMoreClient : handleLoadMoreFreelancer}
+                    disabled={(activeTab === UserRole.CLIENT ? clientPagination : freelancerPagination).loading}
+                    className="px-6 py-3 bg-white border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 hover:border-gray-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 shadow-sm"
+                  >
+                    {(activeTab === UserRole.CLIENT ? clientPagination : freelancerPagination).loading 
+                      ? 'Loading...' 
+                      : `Load More ${activeTab === UserRole.CLIENT ? 'Client' : 'Freelancer'} Contracts`
+                    }
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -452,7 +515,7 @@ export default function EnhancedDashboardPage() {
                   <div className="w-2 h-2 bg-orange-600 rounded-full"></div>
                   <div className="flex-1">
                     <p className="text-sm font-medium text-gray-900">
-                      Contract "{contract.description.slice(0, 30)}..." 
+                      Contract &quot;{contract.description.slice(0, 30)}&quot;... 
                     </p>
                     <p className="text-xs text-gray-600">
                       Created {formatDate(contract.createdAt || Date.now())} • {formatSTX(contract.totalAmount)}

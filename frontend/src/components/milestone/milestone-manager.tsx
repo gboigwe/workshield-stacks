@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Calendar, Plus, Clock, DollarSign, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
 import { Contract, Milestone, MilestoneStatus } from '../../types';
@@ -30,7 +30,6 @@ export default function MilestoneManager({
   rejectMilestone
 }: MilestoneManagerProps) {
   const [showAddMilestone, setShowAddMilestone] = useState(false);
-  const [selectedMilestone, setSelectedMilestone] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   
   const [milestoneData, setMilestoneData] = useState<MilestoneFormData>({
@@ -85,7 +84,6 @@ export default function MilestoneManager({
 
       if (result.success) {
         onContractUpdate();
-        setSelectedMilestone(null);
       } else {
         alert(`Error submitting milestone: ${result.error}`);
       }

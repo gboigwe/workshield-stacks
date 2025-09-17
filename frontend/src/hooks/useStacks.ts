@@ -19,7 +19,7 @@ import {
 import { STACKS_TESTNET, STACKS_MAINNET } from '@stacks/network';
 
 import { Contract, Milestone, TransactionResponse, isValidStacksAddress } from '@/types';
-import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 // Initialize App Config and Session
 const appConfig = new AppConfig(['store_write', 'publish_data']);
@@ -108,6 +108,13 @@ const makeProxyApiCall = async (endpoint: string, body?: any) => {
 
     if (!response.ok) {
       const errorText = await response.text();
+      
+      // Check if it's a Cloudflare block
+      if (errorText.includes('Cloudflare') || errorText.includes('blocked')) {
+        console.warn('🛡️ Request blocked by Cloudflare protection');
+        console.warn('💡 Solutions: Use VPN, different network, or contact the API provider');
+      }
+      
       throw new Error(`Proxy API error: ${response.status} - ${errorText}`);
     }
 
@@ -137,14 +144,28 @@ const makeSmartApiCall = async (apiCall: () => Promise<any>, fallbackEndpoint?: 
         console.log('🔄 Trying proxy fallback for:', fallbackEndpoint);
         return await makeProxyApiCall(fallbackEndpoint, fallbackBody);
       } catch (proxyError: any) {
-        console.error('❌ Both direct and proxy calls failed:', {
+        console.error('❌ API calls blocked - likely Cloudflare protection:', {
           directError: error.message,
           proxyError: proxyError.message,
-          fallbackEndpoint
+          fallbackEndpoint,
+          solution: 'Try using VPN or different network'
         });
+        
+        // In development, return mock data to prevent crashes
+        if (process.env.NODE_ENV === 'development') {
+          console.log('🔧 Development mode: returning mock data');
+          return { type: 'uint', value: 0 }; // Mock empty response
+        }
         throw proxyError;
       }
     } else {
+      console.error('❌ API call failed - no fallback available:', error.message);
+      
+      // In development, return mock data to prevent crashes
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔧 Development mode: returning mock data');
+        return { type: 'uint', value: 0 }; // Mock empty response
+      }
       throw error;
     }
   }
@@ -154,7 +175,7 @@ const network = getNetwork();
 
 // Contract Configuration
 const CONTRACTS = {
-  ESCROW: process.env.NEXT_PUBLIC_ESCROW_CONTRACT || 'ST3A5HQKQM3T3BV1MCZ45S6Q729V8355BQ0W0NP2V.workshield-escrow-v3',
+  ESCROW: process.env.NEXT_PUBLIC_ESCROW_CONTRACT || 'ST3A5HQKQM3T3BV1MCZ45S6Q729V8355BQ0W0NP2V.workshield-test-v3',
   PAYMENTS: process.env.NEXT_PUBLIC_PAYMENTS_CONTRACT || 'ST3A5HQKQM3T3BV1MCZ45S6Q729V8355BQ0W0NP2V.workshield-payments',
   DISPUTE: process.env.NEXT_PUBLIC_DISPUTE_CONTRACT || 'ST3A5HQKQM3T3BV1MCZ45S6Q729V8355BQ0W0NP2V.workshield-dispute'
 };
@@ -202,6 +223,35 @@ const QUERY_CONFIG = {
   retry: 2,
   retryDelay: (attemptIndex: number) => Math.min(1000 * 2 ** attemptIndex, 30000),
 };
+
+// Pagination Support Interfaces
+export interface PaginatedContractsResult {
+  contracts: Contract[];
+  hasMore: boolean;
+  total?: number;
+  offset: number;
+  limit: number;
+}
+
+export interface PaginatedMilestonesResult {
+  milestones: Milestone[];
+  hasMore: boolean;
+  total?: number;
+  offset: number;
+  limit: number;
+}
+
+export interface ContractsFetchOptions {
+  offset?: number;
+  limit?: number;
+  userAddress?: string;
+}
+
+export interface MilestonesFetchOptions {
+  offset?: number;
+  limit?: number;
+  contractId: number;
+}
 
 export const useStacks = () => {
   const [mounted, setMounted] = useState(false);
@@ -345,6 +395,66 @@ export const useStacks = () => {
     }
   }, [fetchMilestoneById]);
 
+  // Paginated version for milestones
+  const fetchMilestonesPaginated = useCallback(async (options: MilestonesFetchOptions): Promise<PaginatedMilestonesResult> => {
+    const { offset = 0, limit = 10, contractId } = options;
+    const cacheKey = `milestones-paginated-${contractId}-${offset}-${limit}`;
+    const cached = getCachedData<PaginatedMilestonesResult>(cacheKey);
+    if (cached !== null) return cached;
+
+    try {
+      console.log(`📄 Fetching paginated milestones for contract ${contractId} (offset: ${offset}, limit: ${limit})`);
+      
+      const milestones: Milestone[] = [];
+      let foundMilestones = 0;
+      let totalMilestones = 0;
+      
+      // Scan through milestones to find total and paginate
+      for (let i = 1; i <= 100; i++) { // Reasonable upper limit
+        const milestone = await fetchMilestoneById(contractId, i);
+        if (milestone === null) break; // No more milestones
+        
+        totalMilestones++;
+        
+        // Check if this milestone should be included based on pagination
+        if (foundMilestones >= offset && milestones.length < limit) {
+          milestones.push(milestone);
+          console.log(`✅ Added paginated milestone ${milestone.id} (${milestones.length}/${limit})`);
+        }
+        foundMilestones++;
+        
+        // Stop if we've collected enough milestones for this page
+        if (milestones.length >= limit && foundMilestones > offset + limit) {
+          break;
+        }
+      }
+      
+      const hasMore = totalMilestones > offset + limit;
+      
+      const result: PaginatedMilestonesResult = {
+        milestones,
+        hasMore,
+        total: totalMilestones,
+        offset,
+        limit
+      };
+      
+      console.log(`🎯 MILESTONE PAGINATION RESULT: Found ${totalMilestones} total milestones, returning ${milestones.length} (offset: ${offset}, hasMore: ${hasMore})`);
+      
+      setCachedData(cacheKey, result);
+      return result;
+    } catch (error) {
+      console.error(`❌ Error fetching paginated milestones for contract ${contractId}:`, error);
+      return {
+        milestones: [],
+        hasMore: false,
+        total: 0,
+        offset,
+        limit
+      };
+    }
+  }, [fetchMilestoneById]);
+
   const fetchContractByIdInternal = useCallback(async (contractId: number): Promise<Contract | null> => {
     const cacheKey = `contract-${contractId}`;
     const cached = getCachedData<Contract>(cacheKey);
@@ -446,6 +556,89 @@ export const useStacks = () => {
       return [];
     }
   }, [fetchTotalContractsCount, fetchContractByIdInternal]);
+
+  // Paginated version for contracts
+  const fetchUserContractsPaginated = useCallback(async (options: ContractsFetchOptions): Promise<PaginatedContractsResult> => {
+    const { offset = 0, limit = 10, userAddress: targetAddress } = options;
+    const address = targetAddress || userAddress;
+    
+    if (!address) {
+      return {
+        contracts: [],
+        hasMore: false,
+        total: 0,
+        offset,
+        limit
+      };
+    }
+
+    try {
+      console.log(`📄 Fetching paginated contracts for user ${address} (offset: ${offset}, limit: ${limit})`);
+      
+      const totalContracts = await fetchTotalContractsCount();
+      console.log(`📊 Total contracts on blockchain: ${totalContracts}`);
+      
+      const userContracts: Contract[] = [];
+      let foundContracts = 0;
+      
+      // We need to scan through contracts to find user's contracts since we can't directly query by user
+      // Start scanning from contract 1, but collect based on pagination of found contracts
+      const batchSize = 3;
+      let shouldStop = false;
+      
+      for (let i = 1; i <= totalContracts && !shouldStop; i += batchSize) {
+        const batch = [];
+        for (let j = i; j < Math.min(i + batchSize, totalContracts + 1); j++) {
+          batch.push(fetchContractByIdInternal(j));
+        }
+        
+        const batchResults = await Promise.all(batch);
+        
+        for (const contract of batchResults) {
+          if (contract && (contract.client === address || contract.freelancer === address)) {
+            // Check if this contract should be included based on pagination
+            if (foundContracts >= offset && userContracts.length < limit) {
+              userContracts.push(contract);
+              console.log(`✅ Added paginated contract ${contract.id} (${userContracts.length}/${limit})`);
+            }
+            foundContracts++;
+            
+            // Stop if we've collected enough contracts for this page
+            if (userContracts.length >= limit) {
+              shouldStop = true;
+              break;
+            }
+          }
+        }
+        
+        // Add delay between batches
+        if (i + batchSize <= totalContracts && !shouldStop) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
+      
+      const hasMore = foundContracts > offset + limit;
+      
+      console.log(`🎯 PAGINATION RESULT: Found ${foundContracts} total user contracts, returning ${userContracts.length} (offset: ${offset}, hasMore: ${hasMore})`);
+      
+      return {
+        contracts: userContracts,
+        hasMore,
+        total: foundContracts,
+        offset,
+        limit
+      };
+    } catch (error) {
+      console.error('❌ Error fetching paginated user contracts:', error);
+      return {
+        contracts: [],
+        hasMore: false,
+        total: 0,
+        offset,
+        limit
+      };
+    }
+  }, [fetchTotalContractsCount, fetchContractByIdInternal, userAddress]);
 
   // ✅ REACT QUERY HOOKS
   const {
@@ -651,7 +844,7 @@ export const useStacks = () => {
         error: `Contract creation failed: ${errorMessage}` 
       };
     }
-  }, [isSignedIn, userData, userAddress, network, queryClient]); // ✅ FIXED: Proper dependencies
+  }, [isSignedIn, userData, userAddress, queryClient]); // ✅ FIXED: Proper dependencies
 
   // ✅ REAL-TIME CONTROLS
   const enableRealTimeUpdates = useCallback(() => {
@@ -749,7 +942,7 @@ export const useStacks = () => {
         error: `Milestone creation failed: ${errorMessage}` 
       };
     }
-  }, [isSignedIn, userData, userAddress, network, queryClient]);
+  }, [isSignedIn, userData, userAddress, queryClient]);
 
   const submitMilestone = useCallback(async (
     contractId: number,
@@ -796,7 +989,7 @@ export const useStacks = () => {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       return { success: false, error: errorMessage };
     }
-  }, [isSignedIn, userData, userAddress, network, queryClient]);
+  }, [isSignedIn, userData, userAddress, queryClient]);
 
   const approveMilestone = useCallback(async (
     contractId: number,
@@ -893,7 +1086,7 @@ export const useStacks = () => {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       return { success: false, error: errorMessage };
     }
-  }, [isSignedIn, userData, userAddress, network, queryClient]);
+  }, [isSignedIn, userData, userAddress, queryClient]);
 
   if (!mounted) {
     return {
@@ -913,15 +1106,33 @@ export const useStacks = () => {
       fetchUserContracts: () => Promise.resolve([]),
       fetchContractById: () => Promise.resolve(null),
       fetchMilestonesByContract: () => Promise.resolve([]),
+      fetchUserContractsPaginated: () => Promise.resolve({
+        contracts: [],
+        hasMore: false,
+        total: 0,
+        offset: 0,
+        limit: 10
+      }),
+      fetchMilestonesPaginated: () => Promise.resolve({
+        milestones: [],
+        hasMore: false,
+        total: 0,
+        offset: 0,
+        limit: 10
+      }),
+      fetchTotalContractsCount: () => Promise.resolve(0),
       createEscrow: () => Promise.resolve({ success: false, error: 'Not mounted' }),
       addMilestone: () => Promise.resolve({ success: false, error: 'Not mounted' }),
       submitMilestone: () => Promise.resolve({ success: false, error: 'Not mounted' }),
       approveMilestone: () => Promise.resolve({ success: false, error: 'Not mounted' }),
       rejectMilestone: () => Promise.resolve({ success: false, error: 'Not mounted' }),
       enableRealTimeUpdates: () => {},
-      // disableRealTimeUpdates: () => {},
+      disableRealTimeUpdates: () => {},
       isPollingEnabled: false,
       validateAddress: () => false,
+      enableActivePolling: () => {},
+      disableActivePolling: () => {},
+      debugContractSystem: () => {},
     };
   }
 
@@ -950,6 +1161,11 @@ export const useStacks = () => {
     fetchUserContracts: fetchUserContractsInternal,
     fetchContractById: fetchContractByIdInternal,
     fetchMilestonesByContract,
+    
+    // Paginated operations
+    fetchUserContractsPaginated,
+    fetchMilestonesPaginated,
+    fetchTotalContractsCount,
     
     // Enhanced contract creation (with validation kept)
     createEscrow,

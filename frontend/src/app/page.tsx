@@ -140,7 +140,7 @@ export default function HomePage() {
               Why Choose WorkShield?
             </h2>
             <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-              Built on Bitcoin's security with modern smart contract functionality
+              Built on Bitcoin&apos;s security with modern smart contract functionality
             </p>
           </motion.div>
 

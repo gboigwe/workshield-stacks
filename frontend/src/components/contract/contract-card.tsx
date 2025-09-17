@@ -7,7 +7,6 @@ import {
   DollarSign, 
   User, 
   Clock, 
-  CheckCircle, 
   AlertTriangle,
   Eye,
   Target,

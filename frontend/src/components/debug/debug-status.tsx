@@ -27,7 +27,6 @@ interface DebugStatusProps {
 const DebugStatus: React.FC<DebugStatusProps> = ({ className = '' }) => {
   const { 
     isSignedIn, 
-    userData, 
     loading, 
     network, 
     userAddress, 
@@ -47,8 +46,8 @@ const DebugStatus: React.FC<DebugStatusProps> = ({ className = '' }) => {
     }
     
     // Fallback string check for network names
-    if (network && typeof (network as any).toString === 'function') {
-      const networkName = (network as any).toString().toLowerCase();
+    if (network && typeof (network as Record<string, unknown>).toString === 'function') {
+      const networkName = (network as Record<string, unknown>).toString().toLowerCase();
       return networkName.includes('mainnet') || networkName.includes('main');
     }
     

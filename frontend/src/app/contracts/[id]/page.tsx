@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useStacks } from '@/hooks/useStacks';
@@ -8,16 +8,13 @@ import {
   Calendar, 
   DollarSign, 
   User, 
-  Clock, 
   CheckCircle, 
   AlertTriangle,
   Plus,
   ArrowLeft,
   Send,
   FileText,
-  Edit3,
-  X,
-  ExternalLink
+  X
 } from 'lucide-react';
 import {
   Contract,
@@ -54,8 +51,8 @@ export default function ContractDetailsPage() {
   const [showSubmitForm, setShowSubmitForm] = useState<number | null>(null);
   const [showRejectForm, setShowRejectForm] = useState<number | null>(null);
 
-  // ✅ ENHANCED: Comprehensive Clarity value parser
-  const parseStacksValue = (value: any): any => {
+  // ✅ ENHANCED: Comprehensive Clarity value parser (wrapped in useCallback)
+  const parseStacksValue = useCallback((value: any): any => {
     // Handle null/undefined
     if (value === null || value === undefined) {
       return value;
@@ -81,10 +78,27 @@ export default function ContractDetailsPage() {
     }
     
     return value;
-  };
+  }, []);
 
-  // ✅ ENHANCED: Safe contract parser
-  const parseContractData = (rawContract: any): Contract | null => {
+  // ✅ ENHANCED: Safe milestone parser (wrapped in useCallback)
+  const parseMilestoneData = useCallback((rawMilestone: any): Milestone => {
+    const parsed = parseStacksValue(rawMilestone);
+    
+    return {
+      id: parseInt(String(parsed.id || '0')),
+      description: String(parsed.description || ''),
+      amount: parseInt(String(parsed.amount || '0')),
+      deadline: parseInt(String(parsed.deadline || '0')),
+      status: parseInt(String(parsed.status || '0')) as MilestoneStatus,
+      submissionNotes: String(parsed.submissionNotes || parsed['submission-notes'] || ''),
+      rejectionReason: String(parsed.rejectionReason || parsed['rejection-reason'] || ''),
+      submittedAt: parsed.submittedAt ? parseInt(String(parsed.submittedAt)) : undefined,
+      approvedAt: parsed.approvedAt ? parseInt(String(parsed.approvedAt)) : undefined,
+    };
+  }, [parseStacksValue]);
+
+  // ✅ ENHANCED: Safe contract parser (wrapped in useCallback to prevent re-renders)
+  const parseContractData = useCallback((rawContract: any): Contract | null => {
     try {
       if (!rawContract) return null;
       
@@ -110,24 +124,7 @@ export default function ContractDetailsPage() {
       console.error('Error parsing contract data:', error);
       return null;
     }
-  };
-
-  // ✅ ENHANCED: Safe milestone parser
-  const parseMilestoneData = (rawMilestone: any): Milestone => {
-    const parsed = parseStacksValue(rawMilestone);
-    
-    return {
-      id: parseInt(String(parsed.id || '0')),
-      description: String(parsed.description || ''),
-      amount: parseInt(String(parsed.amount || '0')),
-      deadline: parseInt(String(parsed.deadline || '0')),
-      status: parseInt(String(parsed.status || '0')) as MilestoneStatus,
-      submissionNotes: String(parsed.submissionNotes || parsed['submission-notes'] || ''),
-      rejectionReason: String(parsed.rejectionReason || parsed['rejection-reason'] || ''),
-      submittedAt: parsed.submittedAt ? parseInt(String(parsed.submittedAt)) : undefined,
-      approvedAt: parsed.approvedAt ? parseInt(String(parsed.approvedAt)) : undefined,
-    };
-  };
+  }, [contractId, parseStacksValue, parseMilestoneData]);
 
   // Form states
   const [milestoneForm, setMilestoneForm] = useState({
@@ -173,7 +170,7 @@ export default function ContractDetailsPage() {
     };
 
     loadContract();
-  }, [contractId, isSignedIn, userAddress, fetchContractById]);
+  }, [contractId, isSignedIn, userAddress, fetchContractById, parseContractData]);
 
   // Helper functions for contract status
   const getContractStatusColor = (status: ContractStatus) => {
@@ -331,7 +328,7 @@ export default function ContractDetailsPage() {
         <div className="text-center">
           <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
           <h2 className="text-xl font-semibold text-gray-900 mb-2">Contract Not Found</h2>
-          <p className="text-gray-600 mb-4">The contract you're looking for doesn't exist or you don't have access to it.</p>
+          <p className="text-gray-600 mb-4">The contract you&apos;re looking for doesn&apos;t exist or you don&apos;t have access to it.</p>
           <button
             onClick={() => router.push('/dashboard')}
             className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
@@ -467,7 +464,7 @@ export default function ContractDetailsPage() {
                 <p className="text-gray-600 mb-4">
                   {userRole === UserRole.CLIENT 
                     ? 'Start by adding your first milestone to break down the project.'
-                    : 'The client hasn\'t added any milestones yet.'
+                    : 'The client hasn&apos;t added any milestones yet.'
                   }
                 </p>
                 {canAddMilestone && (
@@ -482,7 +479,7 @@ export default function ContractDetailsPage() {
               </div>
             ) : (
               // ✅ SAFE: All milestone data is now properly parsed
-              contract.milestones.map((milestone, index) => (
+              contract.milestones.map((milestone) => (
                 <div key={milestone.id} className="border rounded-lg p-4">
                   <div className="flex justify-between items-start mb-3">
                     <div className="flex-1">

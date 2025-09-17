@@ -1,6 +1,5 @@
 import { 
-  STACKS_TESTNET,
-  STACKS_MAINNET 
+  STACKS_TESTNET
 } from '@stacks/network';
 import {
   uintCV,

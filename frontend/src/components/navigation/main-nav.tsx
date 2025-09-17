@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { useStacks } from '@/hooks/useStacks';
@@ -16,7 +16,8 @@ import {
   Wallet,
   ChevronDown,
   Menu,
-  X
+  X,
+  Building
 } from 'lucide-react';
 import { formatAddress } from '@/types';
 
@@ -32,7 +33,6 @@ interface NavItem {
 
 const MainNavigation: React.FC = () => {
   const { isSignedIn, userAddress, connectWallet, disconnectWallet, clientContracts, freelancerContracts } = useStacks();
-  const router = useRouter();
   const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
@@ -58,6 +58,13 @@ const MainNavigation: React.FC = () => {
       href: '/dashboard', // ✅ FIXED: Routes to proper dashboard
       icon: <LayoutDashboard className="w-5 h-5" />,
       description: 'Overview and stats',
+      requiresAuth: true
+    },
+    {
+      name: 'Organizations',
+      href: '/dashboard/organizations',
+      icon: <Building className="w-5 h-5" />,
+      description: 'Manage teams',
       requiresAuth: true
     },
     {

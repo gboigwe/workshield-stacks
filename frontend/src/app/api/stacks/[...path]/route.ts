@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 
 // ✅ COMPREHENSIVE API PROXY for CORS and Rate Limiting Fix
-export async function POST(request: NextRequest, { params }: { params: { path: string[] } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   try {
     // Your Hiro API key
     const apiKey = process.env.NEXT_PUBLIC_HIRO_API_KEY || '7d030816adf5527229ee20a9a36aaf5a';
     
     // Build the target URL
-    const path = params.path.join('/');
+    const resolvedParams = await params;
+    const path = resolvedParams.path.join('/');
     const baseUrl = process.env.NEXT_PUBLIC_NETWORK === 'mainnet' 
       ? 'https://api.hiro.so' 
       : 'https://api.testnet.hiro.so';
@@ -104,11 +105,12 @@ export async function POST(request: NextRequest, { params }: { params: { path: s
 }
 
 // ✅ HANDLE GET REQUESTS
-export async function GET(request: NextRequest, { params }: { params: { path: string[] } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   try {
     const apiKey = process.env.NEXT_PUBLIC_HIRO_API_KEY || '49c6e72fb90e5b04c2f53721cd1f9a59';
     
-    const path = params.path.join('/');
+    const resolvedParams = await params;
+    const path = resolvedParams.path.join('/');
     const baseUrl = process.env.NEXT_PUBLIC_NETWORK === 'mainnet' 
       ? 'https://api.hiro.so' 
       : 'https://api.testnet.hiro.so';
@@ -170,7 +172,7 @@ export async function GET(request: NextRequest, { params }: { params: { path: st
 }
 
 // ✅ HANDLE OPTIONS for CORS preflight
-export async function OPTIONS(request: NextRequest) {
+export async function OPTIONS() {
   return new NextResponse(null, {
     status: 200,
     headers: {

@@ -19,7 +19,7 @@ export default function Providers({ children }: { children: React.ReactNode }) {
             retry: (failureCount, error) => {
               // Don't retry on certain errors
               if (error && typeof error === 'object' && 'status' in error) {
-                const status = (error as any).status;
+                const status = (error as { status: number }).status;
                 if (status === 404 || status === 403) return false;
               }
               return failureCount < 3;
@@ -34,7 +34,7 @@ export default function Providers({ children }: { children: React.ReactNode }) {
             // Retry mutations on network errors
             retry: (failureCount, error) => {
               if (error && typeof error === 'object' && 'message' in error) {
-                const message = (error as any).message;
+                const message = (error as { message: string }).message;
                 if (message.includes('User denied') || message.includes('cancelled')) {
                   return false;
                 }

@@ -8,9 +8,7 @@ import {
   Calendar, 
   DollarSign, 
   User, 
-  Clock, 
-  CheckCircle, 
-  AlertTriangle,
+  CheckCircle,
   Plus,
   Eye
 } from 'lucide-react';
@@ -65,7 +63,7 @@ export default function ContractListPage() {
               setUserRole(UserRole.CLIENT); // Default to client if both
             }
             
-          } catch (error) {
+          } catch {
           } finally {
             setLoadingContracts(false);
           }

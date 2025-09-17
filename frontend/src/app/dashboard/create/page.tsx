@@ -5,10 +5,6 @@ import { useRouter } from 'next/navigation';
 import { useStacks } from '@/hooks/useStacks';
 import { ArrowLeft, CheckCircle, XCircle, AlertCircle, User, Calendar, DollarSign, FileText } from 'lucide-react';
 
-// Helper function to convert STX to microSTX
-const stxToMicroStx = (stx: number): number => {
-  return Math.floor(stx * 1000000);
-};
 
 // Enhanced validation interface
 interface ValidationError {
@@ -39,7 +35,6 @@ export default function CreateContractPage() {
     validateAddress, 
     transactionInProgress,
     connectWallet,
-    userAddress  // ✅ ADDED: This was missing
   } = useStacks();
 
   const [formData, setFormData] = useState<FormData>({
