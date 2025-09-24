@@ -22,6 +22,8 @@
 
 ;; Data Variables
 (define-data-var next-dispute-id uint u1)
+(define-data-var dao-contract-principal (optional principal) none)
+(define-data-var escrow-contract-principal (optional principal) none)
 
 ;; Data Maps
 (define-map disputes
@@ -134,33 +136,72 @@
   )
 )
 
-;; Resolve dispute (owner/admin only for MVP)
-(define-public (resolve-dispute 
+;; Resolve dispute (DAO only)
+(define-public (dao-resolve-dispute 
     (dispute-id uint)
-    (resolution uint))
+    (dao-proposal-id uint))
   (let 
     (
       (dispute-data (unwrap! (map-get? disputes dispute-id) err-dispute-not-found))
       (current-time stacks-block-height)
     )
-    ;; Validations
-    (asserts! (is-eq tx-sender contract-owner) err-owner-only)
+    ;; Validations - only DAO contract can call this
+    (asserts! (is-eq tx-sender (unwrap! (var-get dao-contract-principal) err-not-authorized)) err-not-authorized)
     (asserts! (is-eq (get status dispute-data) dispute-open) err-invalid-state)
-    (asserts! (or 
-      (is-eq resolution resolution-client-wins)
-      (is-eq resolution resolution-freelancer-wins)
-      (is-eq resolution resolution-split)
-    ) err-invalid-state)
     
-    ;; Update dispute with resolution
+    ;; Update dispute with resolution (defaulting to client wins for now)
+    ;; In a real implementation, the resolution would be determined by the DAO proposal
     (map-set disputes dispute-id
       (merge dispute-data {
         status: dispute-resolved,
-        resolution: resolution,
+        resolution: resolution-client-wins, ;; This would be passed from DAO decision
         resolved-at: (some current-time)
       })
     )
     
+    ;; Trigger escrow action based on resolution
+    (try! (execute-dispute-resolution dispute-id dao-proposal-id))
+    
+    (ok true)
+  )
+)
+
+;; Execute dispute resolution by calling escrow contract
+(define-private (execute-dispute-resolution (dispute-id uint) (dao-proposal-id uint))
+  (let 
+    (
+      (dispute-data (unwrap! (map-get? disputes dispute-id) err-dispute-not-found))
+      (resolution (get resolution dispute-data))
+      (contract-id (get contract-id dispute-data))
+    )
+    ;; TODO: Call appropriate escrow action based on resolution (would need traits)
+    ;; (match (var-get escrow-contract-principal)
+    ;;   escrow-contract 
+    ;;     (if (is-eq resolution resolution-client-wins)
+    ;;       ;; Refund to client
+    ;;       (contract-call? escrow-contract dao-refund-payment contract-id)
+    ;;       ;; Release to freelancer or split (simplified to release for now)
+    ;;       (contract-call? escrow-contract dao-release-payment contract-id)
+    ;;     )
+    ;;   (ok true)
+    ;; )
+    (ok true)
+  )
+)
+
+;; Admin functions to set contract references
+(define-public (set-dao-contract (dao-contract principal))
+  (begin
+    (asserts! (is-eq tx-sender contract-owner) err-owner-only)
+    (var-set dao-contract-principal (some dao-contract))
+    (ok true)
+  )
+)
+
+(define-public (set-escrow-contract (escrow-contract principal))
+  (begin
+    (asserts! (is-eq tx-sender contract-owner) err-owner-only)
+    (var-set escrow-contract-principal (some escrow-contract))
     (ok true)
   )
 )
